@@ -227,12 +227,17 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 		stream := streams[0]
 		for _, entry := range stream.Messages {
 			for subscriber := range t.subscribers {
+				select {
+				case <-subscriber.disconnected:
+					continue
+					default:
+				}
 				t.ProcessMessage(subscriber, entry, t.lastEventID, false)
 			}
 			streamArgs.Streams[1] = entry.ID
 		}
 
-		time.Sleep(20 * time.Millisecond) // avoid infinite loop consuming CPU
+		time.Sleep(1 * time.Millisecond) // avoid infinite loop consuming CPU
 	}
 
 }
