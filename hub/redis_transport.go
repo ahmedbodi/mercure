@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strconv"
 	"sync"
+	"time"
 )
 
 const defaultRedisStreamName = "mercure-hub-updates"
@@ -81,14 +82,17 @@ func NewRedisTransport(u *url.URL) (*RedisTransport, error) {
 		return nil, fmt.Errorf(`%q: redis connection error "%s": %w`, u, err, ErrInvalidTransportDSN)
 	}
 
-	return &RedisTransport{
+	transport := &RedisTransport{
 		client:           client,
 		streamName:       streamName,
 		size:             size,
 		subscribers:      make(map[*Subscriber]struct{}),
 		closed:           make(chan struct{}),
 		lastEventID:      getLastEventId(client, streamName),
-	}, nil
+	}
+
+	go transport.SubscribeToMessageStream()
+	return transport, nil
 }
 
 // cacheKeyID provides a unique cache identifier for the given ID
@@ -195,10 +199,42 @@ func (t *RedisTransport) AddSubscriber(s *Subscriber) error {
 	t.Unlock()
 
 	if s.RequestLastEventID != "" {
-		t.dispatchHistory(s, toSeq)
+		t.DispatchMessagesToSubscriber(s, s.RequestLastEventID, toSeq);
+	}
+	return nil
+}
+
+func (t *RedisTransport) SubscribeToMessageStream() {
+	streamArgs := &redis.XReadArgs{
+		Streams: []string{t.streamName, "$"},
+		Count:   1,
+		Block:   0,
 	}
 
-	return nil
+	for {
+		select {
+		case <-t.closed:
+			return
+		default:
+		}
+
+		streams, err := t.client.XRead(streamArgs).Result()
+		if err != nil {
+			log.Error(fmt.Errorf("[Redis] XREAD error: %w", err))
+			return
+		}
+
+		stream := streams[0]
+		for _, entry := range stream.Messages {
+			for subscriber := range t.subscribers {
+				t.ProcessMessage(subscriber, entry, t.lastEventID, false)
+			}
+			streamArgs.Streams[1] = entry.ID
+		}
+
+		time.Sleep(20 * time.Millisecond) // avoid infinite loop consuming CPU
+	}
+
 }
 
 // GetSubscribers get the list of active subscribers.
@@ -216,8 +252,7 @@ func (t *RedisTransport) GetSubscribers() (lastEventID string, subscribers []*Su
 	return t.lastEventID, subscribers
 }
 
-func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
-	var fromSeq = s.RequestLastEventID
+func (t *RedisTransport) DispatchMessagesToSubscriber(s *Subscriber, fromSeq string, toSeq string) {
 	if toSeq == "" {
 		toSeq = "+"
 	}
@@ -247,30 +282,30 @@ func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
 
 	responseLastEventID := fromSeq
 	for _, entry := range messages {
-		message, ok := entry.Values["data"]
-		if !ok {
-			s.HistoryDispatched(responseLastEventID)
-			log.Error(fmt.Errorf("[Redis] Read History Entry Error: %w\n", err))
-			return
-		}
-
-		var update *Update
-		if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
-			s.HistoryDispatched(responseLastEventID)
-			log.Error(fmt.Errorf(`[Redis] stream return an invalid entry: %v\n`, err))
-			return
-		}
-
-		if !s.Dispatch(update, true) {
-			s.HistoryDispatched(responseLastEventID)
-			log.Error(fmt.Errorf("[Redis] Dispatch error: %w\n", err))
-			return
-		}
-		responseLastEventID = update.ID
+		responseLastEventID = t.ProcessMessage(s, entry, responseLastEventID, true)
 	}
 
 	s.HistoryDispatched(responseLastEventID)
-	return
+}
+
+func (t *RedisTransport) ProcessMessage(subscriber *Subscriber, entry redis.XMessage, responseLastEventID string, fromHistory bool) string {
+	message, ok := entry.Values["data"]
+	if !ok {
+		log.Error(fmt.Errorf("[Redis] Read History Entry Error\n"))
+		return responseLastEventID
+	}
+
+	var update *Update
+	if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
+		log.Error(fmt.Errorf(`[Redis] stream return an invalid entry: %v\n`, err))
+		return responseLastEventID
+	}
+
+	if !subscriber.Dispatch(update, fromHistory) {
+		log.Error(fmt.Errorf("[Redis] Dispatch error\n"))
+		return responseLastEventID
+	}
+	return update.ID
 }
 
 // Close closes the Transport.
