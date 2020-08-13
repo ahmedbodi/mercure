@@ -130,7 +130,6 @@ func (t *RedisTransport) Dispatch(update *Update) error {
 
 	t.Lock()
 	defer t.Unlock()
-
 	if err := t.persist(update.ID, updateJSON); err != nil {
 		return err
 	}
@@ -177,8 +176,6 @@ func (t *RedisTransport) persist(updateID string, updateJSON []byte) error {
 			redis.call("RPUSH", KEYS[2], streamID)`
 	}
 
-	log.Info(fmt.Printf("[Redis] Save Update ID: %s, Cache Key: %s, Stream: %s\n", updateID, t.cacheKeyID(updateID), t.streamName))
-
 	if err := t.client.Eval(script, []string{t.streamName, t.cacheKeyID(updateID), t.cacheKeyID("")}, t.size, updateJSON).Err(); err != nil {
 		return redisNilToNil(err)
 	}
@@ -199,47 +196,9 @@ func (t *RedisTransport) AddSubscriber(s *Subscriber) error {
 	t.Unlock()
 
 	if s.RequestLastEventID != "" {
-		t.DispatchMessagesToSubscriber(s, s.RequestLastEventID, toSeq);
+		t.dispatchHistory(s, toSeq)
 	}
 	return nil
-}
-
-func (t *RedisTransport) SubscribeToMessageStream() {
-	streamArgs := &redis.XReadArgs{
-		Streams: []string{t.streamName, "$"},
-		Count:   1,
-		Block:   0,
-	}
-
-	for {
-		select {
-		case <-t.closed:
-			return
-		default:
-		}
-
-		streams, err := t.client.XRead(streamArgs).Result()
-		if err != nil {
-			log.Error(fmt.Errorf("[Redis] XREAD error: %w", err))
-			return
-		}
-
-		stream := streams[0]
-		for _, entry := range stream.Messages {
-			for subscriber := range t.subscribers {
-				select {
-				case <-subscriber.disconnected:
-					continue
-					default:
-				}
-				t.ProcessMessage(subscriber, entry, t.lastEventID, false)
-			}
-			streamArgs.Streams[1] = entry.ID
-		}
-
-		time.Sleep(1 * time.Millisecond) // avoid infinite loop consuming CPU
-	}
-
 }
 
 // GetSubscribers get the list of active subscribers.
@@ -257,60 +216,55 @@ func (t *RedisTransport) GetSubscribers() (lastEventID string, subscribers []*Su
 	return t.lastEventID, subscribers
 }
 
-func (t *RedisTransport) DispatchMessagesToSubscriber(s *Subscriber, fromSeq string, toSeq string) {
+func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
 	if toSeq == "" {
 		toSeq = "+"
 	}
 
+	fromSeq := s.RequestLastEventID
 	if fromSeq != EarliestLastEventID {
-		var err error;
+		var err error
 		fromSeq, err = t.client.LIndex(fromSeq, 0).Result()
 		if err != nil {
 			log.Error(fmt.Errorf("[Redis] Dispatch History List Index Error: %w\n", err))
 			s.HistoryDispatched(EarliestLastEventID)
 			return // No data
 		}
-		log.Info(fmt.Printf("[Redis] Dispatch History List Index result: %s\n", fromSeq))
-
 	} else {
 		fromSeq = "-"
 	}
 
 
-	log.Info(fmt.Printf("[Redis] Searching Stream for records FROM: %s, TO: %s\n", fromSeq, toSeq))
 	messages, err := t.client.XRange(t.streamName, fromSeq, toSeq).Result()
 	if err != nil {
 		log.Error(fmt.Errorf("[Redis] XRange error: %w", err))
 		s.HistoryDispatched(EarliestLastEventID)
-		return // No data
+		return
 	}
 
 	responseLastEventID := fromSeq
 	for _, entry := range messages {
-		responseLastEventID = t.ProcessMessage(s, entry, responseLastEventID, true)
-	}
+		message, ok := entry.Values["data"]
+		if !ok {
+			log.Error(fmt.Errorf("[Redis] Read History Entry Error\n"))
+			s.HistoryDispatched(responseLastEventID)
+			break
+		}
 
-	s.HistoryDispatched(responseLastEventID)
-}
+		var update *Update
+		if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
+			log.Error(fmt.Errorf(`[Redis] stream return an invalid entry: %v\n`, err))
+			s.HistoryDispatched(responseLastEventID)
+			break
+		}
 
-func (t *RedisTransport) ProcessMessage(subscriber *Subscriber, entry redis.XMessage, responseLastEventID string, fromHistory bool) string {
-	message, ok := entry.Values["data"]
-	if !ok {
-		log.Error(fmt.Errorf("[Redis] Read History Entry Error\n"))
-		return responseLastEventID
+		if !s.Dispatch(update, true) {
+			log.Error(fmt.Errorf("[Redis] Dispatch error\n"))
+			s.HistoryDispatched(responseLastEventID)
+			break
+		}
+		s.HistoryDispatched(responseLastEventID)
 	}
-
-	var update *Update
-	if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
-		log.Error(fmt.Errorf(`[Redis] stream return an invalid entry: %v\n`, err))
-		return responseLastEventID
-	}
-
-	if !subscriber.Dispatch(update, fromHistory) {
-		log.Error(fmt.Errorf("[Redis] Dispatch error\n"))
-		return responseLastEventID
-	}
-	return update.ID
 }
 
 // Close closes the Transport.
@@ -330,4 +284,49 @@ func (t *RedisTransport) Close() (err error) {
 		})
 	}
 	return nil
+}
+
+func (t *RedisTransport) SubscribeToMessageStream() {
+	streamArgs := &redis.XReadArgs{
+		Streams: []string{t.streamName, "$"},
+		Count:   1,
+		Block:   0,
+	}
+
+	for {
+		select {
+		case <-t.closed:
+			break
+		default:
+		}
+
+		streams, err := t.client.XRead(streamArgs).Result()
+		if err != nil {
+			log.Error(fmt.Errorf("[Redis] XREAD error: %w", err))
+			continue
+		}
+
+		stream := streams[0]
+		for _, entry := range stream.Messages {
+			message, ok := entry.Values["data"]
+			if !ok {
+				log.Error(fmt.Errorf("[Redis] Read History Entry Error\n"))
+				continue
+			}
+
+			var update *Update
+			if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
+				log.Error(fmt.Errorf(`[Redis] stream return an invalid entry: %v\n`, err))
+				continue
+			}
+
+			if err := t.Dispatch(update); err != nil {
+				log.Error(fmt.Errorf("[Redis] Dispatch error\n"))
+				continue
+			}
+			streamArgs.Streams[1] = entry.ID
+		}
+
+		time.Sleep(1 * time.Millisecond) // avoid infinite loop consuming CPU
+	}
 }
