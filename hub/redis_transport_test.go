@@ -15,7 +15,6 @@ func TestRedisTransportHistory(t *testing.T) {
 	u, _ := url.Parse("redis://localhost:6379/9")
 	transport, _ := NewRedisTransport(u)
 	transport.client.FlushDB()
-	time.Sleep(5 * time.Millisecond)
 	defer transport.Close()
 
 	topics := []string{"https://example.com/foo"}
@@ -48,7 +47,6 @@ func TestRedisTransportRetrieveAllHistory(t *testing.T) {
 	u, _ := url.Parse("redis://localhost:6379/9")
 	transport, _ := NewRedisTransport(u)
 	transport.client.FlushDB()
-	time.Sleep(5 * time.Millisecond)
 	defer transport.Close()
 
 	topics := []string{"https://example.com/foo"}
@@ -80,7 +78,6 @@ func TestRedisTransportHistoryAndLive(t *testing.T) {
 	u, _ := url.Parse("redis://localhost:6379/9")
 	transport, _ := NewRedisTransport(u)
 	transport.client.FlushDB()
-	time.Sleep(5 * time.Millisecond)
 	defer transport.Close()
 
 	topics := []string{"https://example.com/foo"}
@@ -126,7 +123,6 @@ func TestRedisTransportPurgeHistory(t *testing.T) {
 	u, _ := url.Parse("redis://localhost:6379/9?size=5")
 	transport, _ := NewRedisTransport(u)
 	transport.client.FlushDB()
-	time.Sleep(5 * time.Millisecond)
 	defer transport.Close()
 
 	for i := 0; i < 12; i++ {
@@ -202,7 +198,7 @@ func TestRedisTransportDispatch(t *testing.T) {
 	go s.start()
 
 	require.Nil(t, transport.AddSubscriber(s))
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 
 	u := &Update{Topics: s.Topics}
 	require.Nil(t, transport.Dispatch(u))
@@ -252,14 +248,14 @@ func TestRedisCleanDisconnectedSubscribers(t *testing.T) {
 	assert.Len(t, transport.subscribers, 2)
 
 	transport.Dispatch(&Update{Topics: s1.Topics})
-	time.Sleep(3 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 	assert.Len(t, transport.subscribers, 1)
 
 	s2.Disconnect()
 	assert.Len(t, transport.subscribers, 1)
 
 	transport.Dispatch(&Update{})
-	time.Sleep(3 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 	assert.Len(t, transport.subscribers, 0)
 }
 
@@ -267,7 +263,6 @@ func TestRedisGetSubscribers(t *testing.T) {
 	u, _ := url.Parse("redis://localhost:6379/9")
 	transport, _ := NewRedisTransport(u)
 	transport.client.FlushDB()
-	time.Sleep(5 * time.Millisecond)
 	require.NotNil(t, transport)
 	defer transport.Close()
 

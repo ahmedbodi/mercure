@@ -325,25 +325,28 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 			// If we get an error in this block we dont exit
 			// We do this incase there's some sort of inconsistency in the redis data allowing us to keep the client connected
 			// then thanks to the for loop we can just continue until we find a good message
-			stream := streams[0]
-			for _, entry := range stream.Messages {
-				message, ok := entry.Values["data"]
-				if !ok {
-					continue
-				}
-
-				var update *Update
-				if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
-					continue
-				}
-
-				if !subscriber.Dispatch(update, false) {
-					delete(t.subscribers, subscriber)
-					break
-				}
-				subscriber.responseLastEventID <- entry.ID
+			entry := streams[0].Messages[0]
+			message, ok := entry.Values["data"]
+			if !ok {
 				streamArgs.Streams[1] = entry.ID
+				continue
 			}
+
+			var update *Update
+			if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
+				streamArgs.Streams[1] = entry.ID
+				continue
+			}
+
+			if !subscriber.Dispatch(update, false) {
+				// This is the only place where we close the connection
+				// If this errors out, it means the clients gone. we shouldnt run this anymore
+				t.closeSubscriberChannel(subscriber)
+				break
+			}
+
+			subscriber.responseLastEventID <- entry.ID
+			streamArgs.Streams[1] = entry.ID
 			time.Sleep(1 * time.Millisecond) // avoid infinite loop consuming CPU
 		}
 	}
