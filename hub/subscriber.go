@@ -139,7 +139,6 @@ func (s *Subscriber) Dispatch(u *Update, fromHistory bool) bool {
 	case <-s.disconnected:
 		close(s.live.in)
 		return false
-
 	default:
 	}
 
@@ -160,7 +159,7 @@ func (s *Subscriber) Receive() <-chan *Update {
 }
 
 // HistoryDispatched must be called when all messages coming from the history have been dispatched.
-func (s *Subscriber) 		HistoryDispatched(responseLastEventID string) {
+func (s *Subscriber) HistoryDispatched(responseLastEventID string) {
 	s.responseLastEventID <- responseLastEventID
 	close(s.history.in)
 }

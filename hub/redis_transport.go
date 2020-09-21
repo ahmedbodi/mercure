@@ -25,7 +25,7 @@ type RedisTransport struct {
 	sync.RWMutex
 	client           *redis.Client
 	streamName       string
-	size             uint64
+	size             int64
 	subscribers      map[*Subscriber]struct{}
 	closed           chan struct{}
 	closedOnce       sync.Once
@@ -49,21 +49,22 @@ func NewRedisTransport(u *url.URL) (*RedisTransport, error) {
 		q.Del("stream_name")
 	}
 
-	size := uint64(0)
+	size := int64(0)
 	sizeParameter := q.Get("size")
 	if sizeParameter != "" {
-		size, err = strconv.ParseUint(sizeParameter, 10, 64)
+		size, err = strconv.ParseInt(sizeParameter, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf(`%q: invalid "size" parameter %q: %s: %w`, u, sizeParameter, err, ErrInvalidTransportDSN)
+			return nil, fmt.Errorf(`%q: invalid "size" parameter %q: %s: %w\n`, u, sizeParameter, err, ErrInvalidTransportDSN)
 		}
 		q.Del("size")
 	}
 
+	fmt.Printf("Limiting Redis Queue Size to %d\n", size)
 	u.RawQuery = q.Encode()
 
 	redisOptions, err := redis.ParseURL(u.String())
 	if err != nil {
-		return nil, fmt.Errorf(`%q: invalid "redis" dsn %q: %w`, u, u.String(), ErrInvalidTransportDSN)
+		return nil, fmt.Errorf(`%q: invalid "redis" dsn %q: %w\n`, u, u.String(), ErrInvalidTransportDSN)
 	}
 
 	var client *redis.Client
@@ -79,7 +80,7 @@ func NewRedisTransport(u *url.URL) (*RedisTransport, error) {
 	}
 
 	if _, err := client.Ping().Result(); err != nil {
-		return nil, fmt.Errorf(`%q: redis connection error "%s": %w`, u, err, ErrInvalidTransportDSN)
+		return nil, fmt.Errorf(`%q: redis connection error "%s": %w\n`, u, err, ErrInvalidTransportDSN)
 	}
 
 	transport := &RedisTransport{
@@ -90,8 +91,6 @@ func NewRedisTransport(u *url.URL) (*RedisTransport, error) {
 		closed:           make(chan struct{}),
 		lastEventID:      getLastEventId(client, streamName),
 	}
-
-	go transport.SubscribeToMessageStream()
 	return transport, nil
 }
 
@@ -134,12 +133,8 @@ func (t *RedisTransport) Dispatch(update *Update) error {
 		return err
 	}
 
-	for subscriber := range t.subscribers {
-		if !subscriber.Dispatch(update, false) {
-			delete(t.subscribers, subscriber)
-		}
-	}
-	t.lastEventID = update.ID
+	// Contrary to the Bolt Adapter, we dont transmit the message here.
+	// We commit it to redis and leave the sending to each individual subscribers goroutine
 	return nil
 }
 
@@ -157,7 +152,6 @@ func (t *RedisTransport) persist(updateID string, updateJSON []byte) error {
 		//  - Remove it from the list
 		//  - If the length of that list is 0
 		//     - Delete that key
-
 		script = `
 			local limit = tonumber(ARGV[1])
 			local entryId = redis.call("XADD", KEYS[1], "*", "MAXLEN", ARGV[1], "data", ARGV[2])
@@ -195,8 +189,13 @@ func (t *RedisTransport) AddSubscriber(s *Subscriber) error {
 	toSeq := t.lastSeq
 	t.Unlock()
 
+	// If a Last-Event-ID is given we will send out the history
+	// Then we initiale the Subscriber Goroutine
+	// If it isnt given then we start it straight away
 	if s.RequestLastEventID != "" {
 		t.dispatchHistory(s, toSeq)
+	} else {
+		go t.SubscribeToMessageStream(s, "$")
 	}
 	return nil
 }
@@ -216,55 +215,73 @@ func (t *RedisTransport) GetSubscribers() (lastEventID string, subscribers []*Su
 	return t.lastEventID, subscribers
 }
 
+func (t *RedisTransport) historyDispatched(s *Subscriber, lastUpdateId string, lastSequenceId string) {
+	s.HistoryDispatched(lastUpdateId)
+	go t.SubscribeToMessageStream(s, lastSequenceId)
+}
+
 func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
 	if toSeq == "" {
 		toSeq = "+"
 	}
 
 	fromSeq := s.RequestLastEventID
+	responseLastEventID := s.RequestLastEventID
+
+	// This is a very complicated flow which ideally needs to be simplified
+	// We first get the Update ID the client gave and find it inside our db
+	// If it doesnt exist we cancel sending and start from fresh
+	// If it does then we search the redis stream for the update that came after this event
+	// Once we have that, we can then go through the stream from that stream ID to the end of the query
+	// If this fails at any point, we exit history sending and just start the goroutine to start sending new events from this point onwards
 	if fromSeq != EarliestLastEventID {
+		// Get the Sequence ID Of the Message They Received
+		fromSeq = t.cacheKeyID(fromSeq)
 		var err error
 		fromSeq, err = t.client.LIndex(fromSeq, 0).Result()
 		if err != nil {
-			log.Error(fmt.Errorf("[Redis] Dispatch History List Index Error: %w\n", err))
-			s.HistoryDispatched(EarliestLastEventID)
-			return // No data
+			t.historyDispatched(s, responseLastEventID, "$")
+			return
 		}
+
+		// Get the Next Sequence ID
+		streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, fromSeq}, Count: 1, Block: 0}
+		result, err := t.client.XRead(streamArgs).Result()
+		if err != nil {
+			t.historyDispatched(s, responseLastEventID, "$")
+			return
+		}
+		fromSeq = result[0].Messages[0].ID
 	} else {
 		fromSeq = "-"
 	}
 
-
 	messages, err := t.client.XRange(t.streamName, fromSeq, toSeq).Result()
 	if err != nil {
-		log.Error(fmt.Errorf("[Redis] XRange error: %w", err))
-		s.HistoryDispatched(EarliestLastEventID)
+		t.historyDispatched(s, responseLastEventID, "$")
 		return
 	}
 
-	responseLastEventID := fromSeq
 	for _, entry := range messages {
 		message, ok := entry.Values["data"]
 		if !ok {
-			log.Error(fmt.Errorf("[Redis] Read History Entry Error\n"))
-			s.HistoryDispatched(responseLastEventID)
-			break
+			t.historyDispatched(s, responseLastEventID, "$")
+			return
 		}
 
 		var update *Update
 		if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
-			log.Error(fmt.Errorf(`[Redis] stream return an invalid entry: %v\n`, err))
-			s.HistoryDispatched(responseLastEventID)
-			break
+			t.historyDispatched(s, responseLastEventID, "$")
+			return
 		}
 
 		if !s.Dispatch(update, true) {
-			log.Error(fmt.Errorf("[Redis] Dispatch error\n"))
-			s.HistoryDispatched(responseLastEventID)
-			break
+			t.historyDispatched(s, responseLastEventID, "$")
+			return
 		}
-		s.HistoryDispatched(responseLastEventID)
+		responseLastEventID = entry.ID
 	}
+	t.historyDispatched(s, responseLastEventID, responseLastEventID)
 }
 
 // Close closes the Transport.
@@ -286,47 +303,54 @@ func (t *RedisTransport) Close() (err error) {
 	return nil
 }
 
-func (t *RedisTransport) SubscribeToMessageStream() {
-	streamArgs := &redis.XReadArgs{
-		Streams: []string{t.streamName, "$"},
-		Count:   1,
-		Block:   0,
-	}
+func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSequenceId string) {
+	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, lastSequenceId}, Count: 1, Block: 0}
 
 	for {
 		select {
 		case <-t.closed:
+			t.closeSubscriberChannel(subscriber)
+			break
+		case <-subscriber.disconnected:
+			t.closeSubscriberChannel(subscriber)
 			break
 		default:
-		}
+			fmt.Printf("Looking For Messages. Starting Sequence ID: %s\n", lastSequenceId)
 
-		streams, err := t.client.XRead(streamArgs).Result()
-		if err != nil {
-			log.Error(fmt.Errorf("[Redis] XREAD error: %w", err))
-			continue
-		}
-
-		stream := streams[0]
-		for _, entry := range stream.Messages {
-			message, ok := entry.Values["data"]
-			if !ok {
-				log.Error(fmt.Errorf("[Redis] Read History Entry Error\n"))
-				continue
+			streams, err := t.client.XRead(streamArgs).Result()
+			if err != nil {
+				log.Error(fmt.Errorf("[Redis] XREAD error: %w", err))
 			}
 
-			var update *Update
-			if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
-				log.Error(fmt.Errorf(`[Redis] stream return an invalid entry: %v\n`, err))
-				continue
-			}
+			// If we get an error in this block we dont exit
+			// We do this incase there's some sort of inconsistency in the redis data allowing us to keep the client connected
+			// then thanks to the for loop we can just continue until we find a good message
+			stream := streams[0]
+			for _, entry := range stream.Messages {
+				message, ok := entry.Values["data"]
+				if !ok {
+					continue
+				}
 
-			if err := t.Dispatch(update); err != nil {
-				log.Error(fmt.Errorf("[Redis] Dispatch error\n"))
-				continue
+				var update *Update
+				if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
+					continue
+				}
+
+				if !subscriber.Dispatch(update, false) {
+					delete(t.subscribers, subscriber)
+					break
+				}
+				subscriber.responseLastEventID <- entry.ID
+				streamArgs.Streams[1] = entry.ID
 			}
-			streamArgs.Streams[1] = entry.ID
+			time.Sleep(1 * time.Millisecond) // avoid infinite loop consuming CPU
 		}
-
-		time.Sleep(1 * time.Millisecond) // avoid infinite loop consuming CPU
 	}
+}
+
+func (t *RedisTransport) closeSubscriberChannel(subscriber *Subscriber) {
+	t.Lock();
+	defer t.Unlock();
+	delete(t.subscribers, subscriber)
 }
