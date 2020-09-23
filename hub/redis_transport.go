@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strconv"
 	"sync"
-	"time"
 )
 
 const defaultRedisStreamName = "mercure-hub-updates"
@@ -135,6 +134,7 @@ func (t *RedisTransport) Dispatch(update *Update) error {
 
 	// Contrary to the Bolt Adapter, we dont transmit the message here.
 	// We commit it to redis and leave the sending to each individual subscribers goroutine
+	log.Info(fmt.Sprintf("Update Persisted. Entry ID: %s\n", update.ID))
 	return nil
 }
 
@@ -310,17 +310,21 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 		select {
 		case <-t.closed:
 			t.closeSubscriberChannel(subscriber)
-			break
+			log.Info(fmt.Sprintf("Closing Transport. Entry ID: %s\n", streamArgs.Streams[1]))
+			return
 		case <-subscriber.disconnected:
 			t.closeSubscriberChannel(subscriber)
-			break
+			log.Info(fmt.Sprintf("Subscriber Disconnected. Entry ID: %s\n", streamArgs.Streams[1]))
+			return
 		default:
-			fmt.Printf("Looking For Messages. Starting Sequence ID: %s\n", lastSequenceId)
+			log.Info(fmt.Sprintf("Looking For Messages. Entry ID: %s\n", streamArgs.Streams[1]))
 
 			streams, err := t.client.XRead(streamArgs).Result()
 			if err != nil {
 				log.Error(fmt.Errorf("[Redis] XREAD error: %w", err))
+				continue
 			}
+			log.Info(fmt.Sprintf("Event Found. Last Entry ID: %s\n", streamArgs.Streams[1]))
 
 			// If we get an error in this block we dont exit
 			// We do this incase there's some sort of inconsistency in the redis data allowing us to keep the client connected
@@ -345,9 +349,9 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 				break
 			}
 
+			log.Info(fmt.Sprintf("Event Transmitted. ID: %s\n", entry.ID))
 			subscriber.responseLastEventID <- entry.ID
 			streamArgs.Streams[1] = entry.ID
-			time.Sleep(1 * time.Millisecond) // avoid infinite loop consuming CPU
 		}
 	}
 }
