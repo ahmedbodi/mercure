@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strconv"
 	"sync"
-	"time"
 )
 
 const defaultRedisStreamName = "mercure-hub-updates"
@@ -320,6 +319,7 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 			streams, err := t.client.XRead(streamArgs).Result()
 			if err != nil {
 				log.Error(fmt.Errorf("[Redis] XREAD error: %w", err))
+				continue
 			}
 
 			// If we get an error in this block we dont exit
@@ -347,7 +347,6 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 
 			subscriber.responseLastEventID <- entry.ID
 			streamArgs.Streams[1] = entry.ID
-			time.Sleep(1 * time.Millisecond) // avoid infinite loop consuming CPU
 		}
 	}
 }
