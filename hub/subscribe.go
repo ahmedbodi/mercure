@@ -30,6 +30,7 @@ func (h *Hub) SubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	var heartbeatTimerC <-chan time.Time
 	if heartbeatInterval != time.Duration(0) {
 		heartbeatTimer = time.NewTimer(heartbeatInterval)
+		defer heartbeatTimer.Stop()
 		heartbeatTimerC = heartbeatTimer.C
 	}
 
@@ -39,6 +40,7 @@ func (h *Hub) SubscribeHandler(w http.ResponseWriter, r *http.Request) {
 	var writeTimerC <-chan time.Time
 	if writeTimeout != 0 {
 		writeTimer = time.NewTimer(writeTimeout - dispatchTimeout)
+		defer writeTimer.Stop()
 		writeTimerC = writeTimer.C
 	}
 
@@ -85,12 +87,14 @@ func (h *Hub) registerSubscriber(w http.ResponseWriter, r *http.Request, debug b
 	if err != nil || (claims == nil && !h.config.GetBool("allow_anonymous")) {
 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
 		log.WithFields(s.LogFields).Info(err)
+
 		return nil
 	}
 
 	s.Topics = r.URL.Query()["topic"]
 	if len(s.Topics) == 0 {
 		http.Error(w, "Missing \"topic\" parameter.", http.StatusBadRequest)
+
 		return nil
 	}
 	s.LogFields["subscriber_topics"] = s.Topics
@@ -102,6 +106,7 @@ func (h *Hub) registerSubscriber(w http.ResponseWriter, r *http.Request, debug b
 		http.Error(w, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 		h.dispatchSubscriptionUpdate(s, false)
 		log.WithFields(s.LogFields).Error(err)
+
 		return nil
 	}
 
@@ -155,6 +160,7 @@ func (h *Hub) write(w io.Writer, s *Subscriber, data string, d time.Duration) bo
 	if d == time.Duration(0) {
 		fmt.Fprint(w, data)
 		w.(http.Flusher).Flush()
+
 		return true
 	}
 
@@ -165,11 +171,14 @@ func (h *Hub) write(w io.Writer, s *Subscriber, data string, d time.Duration) bo
 		close(done)
 	}()
 
+	timeout := time.NewTimer(d)
+	defer timeout.Stop()
 	select {
 	case <-done:
 		return true
-	case <-time.After(d):
+	case <-timeout.C:
 		log.WithFields(s.LogFields).Warn("Dispatch timeout reached")
+
 		return false
 	}
 }

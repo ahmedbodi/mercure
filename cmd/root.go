@@ -3,16 +3,15 @@ package cmd
 import (
 	"fmt"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/dunglas/mercure/common"
 	"github.com/dunglas/mercure/hub"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 // rootCmd represents the base command when called without any subcommands.
-var rootCmd = &cobra.Command{ // nolint:gochecknoglobals
+var rootCmd = &cobra.Command{ //nolint:gochecknoglobals
 	Use:   "mercure",
 	Short: "Start the Mercure Hub",
 	Long: `Mercure is a protocol allowing to push data updates to web browsers and
@@ -32,7 +31,7 @@ func Execute() {
 	}
 }
 
-func init() { // nolint:gochecknoinits
+func init() { //nolint:gochecknoinits
 	v := viper.GetViper()
 	cobra.OnInitialize(func() {
 		hub.InitConfig(v)
