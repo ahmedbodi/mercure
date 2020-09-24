@@ -4,7 +4,7 @@ before:
 builds:
 - <<: &build_defaults
     ldflags:
-      - -s -w -X github.com/dunglas/mercure/common.version={{ .Version }} -X github.com/dunglas/mercure/common.commit={{ .ShortCommit }} -X github.com/dunglas/mercure/common.buildDate={{ .Date }}
+      - -s -w -X github.com/ahmedbodi/mercure/common.version={{ .Version }} -X github.com/ahmedbodi/mercure/common.commit={{ .ShortCommit }} -X github.com/ahmedbodi/mercure/common.buildDate={{ .Date }}
   env:
     - CGO_ENABLED=0
   goos:
@@ -47,9 +47,9 @@ release:
 dockers:
 -
   image_templates:
-  - 'dunglas/mercure:{{ .Tag }}'
-  - 'dunglas/mercure:v{{ .Major }}'
-  - 'dunglas/mercure:v{{ .Major }}.{{ .Minor }}'
-  - 'dunglas/mercure:latest'
+  - 'ahmedbodi/mercure:{{ .Tag }}'
+  - 'ahmedbodi/mercure:v{{ .Major }}'
+  - 'ahmedbodi/mercure:v{{ .Major }}.{{ .Minor }}'
+  - 'ahmedbodi/mercure:latest'
   extra_files:
   - public/

@@ -144,7 +144,6 @@ func (s *Subscriber) Dispatch(u *Update, fromHistory bool) bool {
 		close(s.live.in)
 
 		return false
-
 	default:
 	}
 
