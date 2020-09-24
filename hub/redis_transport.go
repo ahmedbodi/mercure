@@ -2,18 +2,20 @@ package hub
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/go-redis/redis"
-	log "github.com/sirupsen/logrus"
 	"net/url"
 	"strconv"
 	"sync"
+
+	"github.com/go-redis/redis"
+	log "github.com/sirupsen/logrus"
 )
 
 const defaultRedisStreamName = "mercure-hub-updates"
 
 func redisNilToNil(err error) error {
-	if err == redis.Nil {
+	if errors.Is(err, redis.Nil) {
 		return nil
 	}
 	return err
@@ -22,14 +24,14 @@ func redisNilToNil(err error) error {
 // RedisTransport implements the TransportInterface using the Redis database.
 type RedisTransport struct {
 	sync.RWMutex
-	client           *redis.Client
-	streamName       string
-	size             int64
-	subscribers      map[*Subscriber]struct{}
-	closed           chan struct{}
-	closedOnce       sync.Once
-	lastSeq          string
-	lastEventID      string
+	client      *redis.Client
+	streamName  string
+	size        int64
+	subscribers map[*Subscriber]struct{}
+	closed      chan struct{}
+	closedOnce  sync.Once
+	lastSeq     string
+	lastEventID string
 }
 
 // NewRedisTransport create a new RedisTransport.
@@ -83,22 +85,22 @@ func NewRedisTransport(u *url.URL) (*RedisTransport, error) {
 	}
 
 	transport := &RedisTransport{
-		client:           client,
-		streamName:       streamName,
-		size:             size,
-		subscribers:      make(map[*Subscriber]struct{}),
-		closed:           make(chan struct{}),
-		lastEventID:      getLastEventId(client, streamName),
+		client:      client,
+		streamName:  streamName,
+		size:        size,
+		subscribers: make(map[*Subscriber]struct{}),
+		closed:      make(chan struct{}),
+		lastEventID: getLastEventID(client, streamName),
 	}
 	return transport, nil
 }
 
-// cacheKeyID provides a unique cache identifier for the given ID
-func (t *RedisTransport) cacheKeyID(ID string) string {
-	return fmt.Sprintf("%s/%s", t.streamName, ID)
+// cacheKeyID provides a unique cache identifier for the given ID.
+func (t *RedisTransport) cacheKeyID(id string) string {
+	return fmt.Sprintf("%s/%s", t.streamName, id)
 }
 
-func getLastEventId(client *redis.Client, streamName string) string {
+func getLastEventID(client *redis.Client, streamName string) string {
 	lastEventID := EarliestLastEventID
 	messages, err := client.XRevRangeN(streamName, "+", "-", 1).Result()
 	if err != nil {
@@ -145,9 +147,9 @@ func (t *RedisTransport) persist(updateID string, updateJSON []byte) error {
 		// Script Explanation
 		// Convert the <Arg:History Size> into a number
 		// Add to <Key:Stream Name> using Auto-Generated Entry ID, Limiting the length to <Arg:History Size> add an entry with the data key set to <Arg:Update JSON> and return <res:Entry ID>
-		// Add to the end of the <Key:cacheKeyId(updateID)> List the <res:Entry ID>
-		// Add to the end of the <Key:cacheKeyId("") List the <Key:cacheKeyId(updateID)>
-		// While the length of the <Key:cacheKeyId("")> List is over <Arg:History Size>
+		// Add to the end of the <Key:cacheKeyID(updateID)> List the <res:Entry ID>
+		// Add to the end of the <Key:cacheKeyID("") List the <Key:cacheKeyID(updateID)>
+		// While the length of the <Key:cacheKeyID("")> List is over <Arg:History Size>
 		//  - Get the first key in the list
 		//  - Remove it from the list
 		//  - If the length of that list is 0
@@ -215,9 +217,9 @@ func (t *RedisTransport) GetSubscribers() (lastEventID string, subscribers []*Su
 	return t.lastEventID, subscribers
 }
 
-func (t *RedisTransport) historyDispatched(s *Subscriber, lastUpdateId string, lastSequenceId string) {
-	s.HistoryDispatched(lastUpdateId)
-	go t.SubscribeToMessageStream(s, lastSequenceId)
+func (t *RedisTransport) historyDispatched(s *Subscriber, lastUpdateID string, lastSequenceID string) {
+	s.HistoryDispatched(lastUpdateID)
+	go t.SubscribeToMessageStream(s, lastSequenceID)
 }
 
 func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
@@ -236,9 +238,8 @@ func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
 	// If this fails at any point, we exit history sending and just start the goroutine to start sending new events from this point onwards
 	if fromSeq != EarliestLastEventID {
 		// Get the Sequence ID Of the Message They Received
-		fromSeq = t.cacheKeyID(fromSeq)
 		var err error
-		fromSeq, err = t.client.LIndex(fromSeq, 0).Result()
+		fromSeq, err = t.client.LIndex(t.cacheKeyID(fromSeq), 0).Result()
 		if err != nil {
 			t.historyDispatched(s, responseLastEventID, "$")
 			return
@@ -303,8 +304,8 @@ func (t *RedisTransport) Close() (err error) {
 	return nil
 }
 
-func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSequenceId string) {
-	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, lastSequenceId}, Count: 1, Block: 0}
+func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSequenceID string) {
+	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, lastSequenceID}, Count: 1, Block: 0}
 
 	for {
 		select {
@@ -357,7 +358,7 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 }
 
 func (t *RedisTransport) closeSubscriberChannel(subscriber *Subscriber) {
-	t.Lock();
-	defer t.Unlock();
+	t.Lock()
+	defer t.Unlock()
 	delete(t.subscribers, subscriber)
 }

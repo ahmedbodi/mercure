@@ -10,6 +10,8 @@ linters:
     - wsl
     - gomnd
     - testpackage
+    - nlreturn
+    - gosec
 
 issues:
   exclude-rules:

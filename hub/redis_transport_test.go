@@ -2,13 +2,14 @@ package hub
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"net/url"
 	"strconv"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRedisTransportHistory(t *testing.T) {
@@ -144,10 +145,10 @@ func TestNewRedisTransport(t *testing.T) {
 	transport.Close()
 
 	u, _ = url.Parse("redis://")
-	_, err = NewRedisTransport(u)
+	_, _ = NewRedisTransport(u)
 
 	u, _ = url.Parse("redis://localhost:6379")
-	_, err = NewRedisTransport(u)
+	_, _ = NewRedisTransport(u)
 
 	u, _ = url.Parse("redis://localhost:6379/9?size=invalid")
 	_, err = NewRedisTransport(u)

@@ -10,9 +10,8 @@ import (
 	"strconv"
 	"sync"
 
-	bolt "go.etcd.io/bbolt"
-
 	log "github.com/sirupsen/logrus"
+	bolt "go.etcd.io/bbolt"
 )
 
 const defaultBoltBucketName = "updates"
