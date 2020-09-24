@@ -4,10 +4,9 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/dgrijalva/jwt-go"
 )
 
 const (
@@ -61,7 +60,7 @@ func TestAuthorizeMultipleAuthorizationHeader(t *testing.T) {
 }
 
 func TestAuthorizeMultipleAuthorizationHeaderRsa(t *testing.T) {
-	r, _ := http.NewRequest("GET", defaultHubURL, nil) // nolint:noctx
+	r, _ := http.NewRequest("GET", defaultHubURL, nil) //nolint:noctx
 	r.Header.Add("Authorization", validEmptyHeaderRsa)
 	r.Header.Add("Authorization", validEmptyHeaderRsa)
 
@@ -155,7 +154,7 @@ func TestAuthorizeAuthorizationHeader(t *testing.T) {
 }
 
 func TestAuthorizeAuthorizationHeaderRsa(t *testing.T) {
-	r, _ := http.NewRequest("GET", defaultHubURL, nil) // nolint:noctx
+	r, _ := http.NewRequest("GET", defaultHubURL, nil) //nolint:noctx
 	r.Header.Add("Authorization", "Bearer "+validFullHeaderRsa)
 
 	claims, err := authorize(r, []byte(publicKeyRsa), rsaSigningMethod, []string{})
@@ -165,7 +164,7 @@ func TestAuthorizeAuthorizationHeaderRsa(t *testing.T) {
 }
 
 func TestAuthorizeAuthorizationHeaderWrongAlgorithm(t *testing.T) {
-	r, _ := http.NewRequest("GET", defaultHubURL, nil) // nolint:noctx
+	r, _ := http.NewRequest("GET", defaultHubURL, nil) //nolint:noctx
 	r.Header.Add("Authorization", "Bearer "+validFullHeaderRsa)
 
 	claims, err := authorize(r, []byte(publicKeyRsa), nil, []string{})
@@ -174,7 +173,7 @@ func TestAuthorizeAuthorizationHeaderWrongAlgorithm(t *testing.T) {
 }
 
 func TestAuthorizeCookieInvalidAlg(t *testing.T) {
-	r, _ := http.NewRequest("GET", defaultHubURL, nil) // nolint:noctx
+	r, _ := http.NewRequest("GET", defaultHubURL, nil) //nolint:noctx
 	r.AddCookie(&http.Cookie{Name: "mercureAuthorization", Value: createDummyNoneSignedJWT()})
 
 	claims, err := authorize(r, []byte{}, hmacSigningMethod, []string{})
@@ -192,7 +191,7 @@ func TestAuthorizeCookieInvalidKey(t *testing.T) {
 }
 
 func TestAuthorizeCookieEmptyKeyRsa(t *testing.T) {
-	r, _ := http.NewRequest("GET", defaultHubURL, nil) // nolint:noctx
+	r, _ := http.NewRequest("GET", defaultHubURL, nil) //nolint:noctx
 	r.AddCookie(&http.Cookie{Name: "mercureAuthorization", Value: validEmptyHeaderRsa})
 
 	claims, err := authorize(r, []byte{}, rsaSigningMethod, []string{})
@@ -259,7 +258,7 @@ func TestAuthorizeCookieNoOriginNoReferer(t *testing.T) {
 }
 
 func TestAuthorizeCookieNoOriginNoRefererRsa(t *testing.T) {
-	r, _ := http.NewRequest("POST", defaultHubURL, nil) // nolint:noctx
+	r, _ := http.NewRequest("POST", defaultHubURL, nil) //nolint:noctx
 	r.AddCookie(&http.Cookie{Name: "mercureAuthorization", Value: validFullHeaderRsa})
 
 	claims, err := authorize(r, []byte(publicKeyRsa), rsaSigningMethod, []string{})
@@ -318,7 +317,7 @@ func TestAuthorizeCookieInvalidReferer(t *testing.T) {
 }
 
 func TestAuthorizeCookieInvalidRefererRsa(t *testing.T) {
-	r, _ := http.NewRequest("POST", defaultHubURL, nil) // nolint:noctx
+	r, _ := http.NewRequest("POST", defaultHubURL, nil) //nolint:noctx
 	r.Header.Add("Referer", "http://192.168.0.%31/")
 	r.AddCookie(&http.Cookie{Name: "mercureAuthorization", Value: validFullHeaderRsa})
 
@@ -340,7 +339,7 @@ func TestAuthorizeCookieOriginHasPriority(t *testing.T) {
 }
 
 func TestAuthorizeCookieOriginHasPriorityRsa(t *testing.T) {
-	r, _ := http.NewRequest("POST", defaultHubURL, nil) // nolint:noctx
+	r, _ := http.NewRequest("POST", defaultHubURL, nil) //nolint:noctx
 	r.Header.Add("Origin", "http://example.net")
 	r.Header.Add("Referer", "http://example.com")
 	r.AddCookie(&http.Cookie{Name: "mercureAuthorization", Value: validFullHeaderRsa})
