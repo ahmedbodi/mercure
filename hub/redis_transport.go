@@ -134,9 +134,15 @@ func (t *RedisTransport) Dispatch(update *Update) error {
 		return err
 	}
 
-	// Contrary to the Bolt Adapter, we dont transmit the message here.
-	// We commit it to redis and leave the sending to each individual subscribers goroutine
 	log.Info(fmt.Sprintf("Update Persisted. Entry ID: %s\n", update.ID))
+
+	for subscriber := range t.subscribers {
+		if !subscriber.Dispatch(update, false) {
+			t.closeSubscriberChannel(subscriber)
+			log.Warn(fmt.Sprintf("Couldn't Dispatch Entry ID: %s. Connection Closed to Subscriber: %s\n", update.ID, subscriber.ID))
+		}
+	}
+
 	return nil
 }
 
