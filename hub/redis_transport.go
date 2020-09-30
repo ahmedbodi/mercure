@@ -311,7 +311,7 @@ func (t *RedisTransport) Close() (err error) {
 }
 
 func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSequenceID string) {
-	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, lastSequenceID}, Count: 1, Block: 0}
+	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, lastSequenceID}, Count: 1, Block: 1}
 
 	for {
 		select {
@@ -364,8 +364,6 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 			streamArgs.Streams[1] = entry.ID
 		}
 	}
-
-	log.Error(fmt.Sprintf("Broke out of Subscriber Pipe. We shouldn't be here. Subscriber ID: %s\n", subscriber.ID))
 }
 
 func (t *RedisTransport) closeSubscriberChannel(subscriber *Subscriber) {
