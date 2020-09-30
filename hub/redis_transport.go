@@ -334,12 +334,14 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 			message, ok := entry.Values["data"]
 			if !ok {
 				streamArgs.Streams[1] = entry.ID
+				log.Warn(fmt.Sprintf("Couldn't Decode Entry. Last Entry ID: %s\n", streamArgs.Streams[1]))
 				continue
 			}
 
 			var update *Update
 			if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
 				streamArgs.Streams[1] = entry.ID
+				log.Warn(fmt.Sprintf("Couldn't JSON Load Entry ID: %s\n", entry.ID))
 				continue
 			}
 
@@ -347,7 +349,8 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 				// This is the only place where we close the connection
 				// If this errors out, it means the clients gone. we shouldnt run this anymore
 				t.closeSubscriberChannel(subscriber)
-				break
+				log.Warn(fmt.Sprintf("Couldn't Dispatch Entry ID: %s. Connection Closed to Subscriber: %s\n", entry.ID, subscriber.ID))
+				return
 			}
 
 			log.Info(fmt.Sprintf("Event Transmitted. ID: %s\n", entry.ID))
@@ -355,10 +358,13 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 			streamArgs.Streams[1] = entry.ID
 		}
 	}
+
+	log.Error(fmt.Sprintf("Broke out of Subscriber Pipe. We shouldn't be here. Subscriber ID: %s\n", subscriber.ID))
 }
 
 func (t *RedisTransport) closeSubscriberChannel(subscriber *Subscriber) {
 	t.Lock()
 	defer t.Unlock()
+	subscriber.Disconnect()
 	delete(t.subscribers, subscriber)
 }
