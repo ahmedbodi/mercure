@@ -75,6 +75,7 @@ func NewRedisTransport(u *url.URL) (*RedisTransport, error) {
 			DB:            redisOptions.DB,
 			Password:      redisOptions.Password,
 			SentinelAddrs: []string{redisOptions.Addr},
+			MinIdleConns: 10,
 		})
 	} else {
 		client = redis.NewClient(redisOptions)
@@ -311,7 +312,7 @@ func (t *RedisTransport) Close() (err error) {
 }
 
 func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSequenceID string) {
-	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, lastSequenceID}, Count: 1, Block: 1}
+	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, lastSequenceID}, Count: 1, Block: 0}
 
 	for {
 		select {
