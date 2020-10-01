@@ -32,10 +32,11 @@ type RedisTransport struct {
 	closedOnce  sync.Once
 	lastSeq     string
 	lastEventID string
+	url         *url.URL
 }
 
-// NewRedisTransport create a new RedisTransport.
-func NewRedisTransport(u *url.URL) (*RedisTransport, error) {
+
+func createRedisClient(u *url.URL) (*redis.Client, string, int64) {
 	var err error
 	q := u.Query()
 	streamName := defaultRedisStreamName
@@ -55,7 +56,8 @@ func NewRedisTransport(u *url.URL) (*RedisTransport, error) {
 	if sizeParameter != "" {
 		size, err = strconv.ParseInt(sizeParameter, 10, 64)
 		if err != nil {
-			return nil, fmt.Errorf(`%q: invalid "size" parameter %q: %s: %w\n`, u, sizeParameter, err, ErrInvalidTransportDSN)
+			log.Errorf(`%q: invalid "size" parameter %q: %s: %w\n`, u, sizeParameter, err, ErrInvalidTransportDSN)
+			return nil, streamName, 0
 		}
 		q.Del("size")
 	}
@@ -65,9 +67,9 @@ func NewRedisTransport(u *url.URL) (*RedisTransport, error) {
 
 	redisOptions, err := redis.ParseURL(u.String())
 	if err != nil {
-		return nil, fmt.Errorf(`%q: invalid "redis" dsn %q: %w\n`, u, u.String(), ErrInvalidTransportDSN)
+		log.Errorf(`%q: invalid "redis" dsn %q: %w\n`, u, u.String(), ErrInvalidTransportDSN)
+		return nil, streamName, 0
 	}
-
 	var client *redis.Client
 	if masterName != "" {
 		client = redis.NewFailoverClient(&redis.FailoverOptions{
@@ -75,20 +77,26 @@ func NewRedisTransport(u *url.URL) (*RedisTransport, error) {
 			DB:            redisOptions.DB,
 			Password:      redisOptions.Password,
 			SentinelAddrs: []string{redisOptions.Addr},
-			MinIdleConns: 10,
 		})
 	} else {
 		client = redis.NewClient(redisOptions)
 	}
 
 	if _, err := client.Ping().Result(); err != nil {
-		return nil, fmt.Errorf(`%q: redis connection error "%s": %w\n`, u, err, ErrInvalidTransportDSN)
+		log.Errorf(`%q: redis connection error "%s": %w\n`, u, err, ErrInvalidTransportDSN)
+		return nil, streamName, 0
 	}
+	return client, streamName, size
+}
 
+// NewRedisTransport create a new RedisTransport.
+func NewRedisTransport(u *url.URL) (*RedisTransport, error) {
+	client, streamName, size := createRedisClient(u)
 	transport := &RedisTransport{
 		client:      client,
 		streamName:  streamName,
 		size:        size,
+		url:         u,
 		subscribers: make(map[*Subscriber]struct{}),
 		closed:      make(chan struct{}),
 		lastEventID: getLastEventID(client, streamName),
@@ -314,6 +322,9 @@ func (t *RedisTransport) Close() (err error) {
 func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSequenceID string) {
 	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, lastSequenceID}, Count: 1, Block: 0}
 
+	client, _, _ := createRedisClient(t.url)
+	defer client.Close()
+
 	for {
 		select {
 		case <-t.closed:
@@ -327,7 +338,7 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 		default:
 			log.Info(fmt.Sprintf("Looking For Messages. Entry ID: %s\n", streamArgs.Streams[1]))
 
-			streams, err := t.client.XRead(streamArgs).Result()
+			streams, err := client.XRead(streamArgs).Result()
 			if err != nil {
 				log.Error(fmt.Errorf("[Redis] XREAD error: %w", err))
 				continue
