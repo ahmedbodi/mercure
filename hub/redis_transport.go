@@ -136,9 +136,6 @@ func (t *RedisTransport) Dispatch(update *Update) error {
 	if err != nil {
 		return err
 	}
-
-	t.Lock()
-	defer t.Unlock()
 	if err := t.persist(update.ID, updateJSON); err != nil {
 		return err
 	}
