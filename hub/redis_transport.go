@@ -134,9 +134,15 @@ func (t *RedisTransport) Dispatch(update *Update) error {
 		return err
 	}
 
-	// Contrary to the Bolt Adapter, we dont transmit the message here.
-	// We commit it to redis and leave the sending to each individual subscribers goroutine
 	log.Info(fmt.Sprintf("Update Persisted. Entry ID: %s\n", update.ID))
+
+	for subscriber := range t.subscribers {
+		if !subscriber.Dispatch(update, false) {
+			t.closeSubscriberChannel(subscriber)
+			log.Warn(fmt.Sprintf("Couldn't Dispatch Entry ID: %s. Connection Closed to Subscriber: %s\n", update.ID, subscriber.ID))
+		}
+	}
+
 	return nil
 }
 
@@ -305,7 +311,7 @@ func (t *RedisTransport) Close() (err error) {
 }
 
 func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSequenceID string) {
-	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, lastSequenceID}, Count: 1, Block: 0}
+	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, lastSequenceID}, Count: 1, Block: 1}
 
 	for {
 		select {
@@ -334,12 +340,14 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 			message, ok := entry.Values["data"]
 			if !ok {
 				streamArgs.Streams[1] = entry.ID
+				log.Warn(fmt.Sprintf("Couldn't Decode Entry. Last Entry ID: %s\n", streamArgs.Streams[1]))
 				continue
 			}
 
 			var update *Update
 			if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
 				streamArgs.Streams[1] = entry.ID
+				log.Warn(fmt.Sprintf("Couldn't JSON Load Entry ID: %s\n", entry.ID))
 				continue
 			}
 
@@ -347,7 +355,8 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 				// This is the only place where we close the connection
 				// If this errors out, it means the clients gone. we shouldnt run this anymore
 				t.closeSubscriberChannel(subscriber)
-				break
+				log.Warn(fmt.Sprintf("Couldn't Dispatch Entry ID: %s. Connection Closed to Subscriber: %s\n", entry.ID, subscriber.ID))
+				return
 			}
 
 			log.Info(fmt.Sprintf("Event Transmitted. ID: %s\n", entry.ID))
@@ -360,5 +369,6 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 func (t *RedisTransport) closeSubscriberChannel(subscriber *Subscriber) {
 	t.Lock()
 	defer t.Unlock()
+	subscriber.Disconnect()
 	delete(t.subscribers, subscriber)
 }
