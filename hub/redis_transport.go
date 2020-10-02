@@ -33,6 +33,7 @@ type RedisTransport struct {
 	lastSeq     string
 	lastEventID string
 	url         *url.URL
+	publishDuringDispatch bool
 }
 
 
@@ -61,7 +62,7 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64) {
 		}
 		q.Del("size")
 	}
-
+	
 	fmt.Printf("Limiting Redis Queue Size to %d\n", size)
 	u.RawQuery = q.Encode()
 
