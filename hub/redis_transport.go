@@ -37,7 +37,7 @@ type RedisTransport struct {
 }
 
 
-func createRedisClient(u *url.URL) (*redis.Client, string, int64) {
+func createRedisClient(u *url.URL) (*redis.Client, string, int64, error) {
 	var err error
 	q := u.Query()
 	streamName := defaultRedisStreamName
@@ -58,18 +58,18 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64) {
 		size, err = strconv.ParseInt(sizeParameter, 10, 64)
 		if err != nil {
 			log.Errorf(`%q: invalid "size" parameter %q: %s: %w\n`, u, sizeParameter, err, ErrInvalidTransportDSN)
-			return nil, streamName, 0
+			return nil, streamName, 0, err
 		}
 		q.Del("size")
 	}
-	
+
 	fmt.Printf("Limiting Redis Queue Size to %d\n", size)
 	u.RawQuery = q.Encode()
 
 	redisOptions, err := redis.ParseURL(u.String())
 	if err != nil {
 		log.Errorf(`%q: invalid "redis" dsn %q: %w\n`, u, u.String(), ErrInvalidTransportDSN)
-		return nil, streamName, 0
+		return nil, streamName, 0, err
 	}
 	var client *redis.Client
 	if masterName != "" {
@@ -85,14 +85,18 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64) {
 
 	if _, err := client.Ping().Result(); err != nil {
 		log.Errorf(`%q: redis connection error "%s": %w\n`, u, err, ErrInvalidTransportDSN)
-		return nil, streamName, 0
+		return nil, streamName, 0, err
 	}
-	return client, streamName, size
+	return client, streamName, size, err
 }
 
 // NewRedisTransport create a new RedisTransport.
 func NewRedisTransport(u *url.URL) (*RedisTransport, error) {
-	client, streamName, size := createRedisClient(u)
+	client, streamName, size, err := createRedisClient(u)
+	if err != nil {
+		return nil, err
+	}
+
 	transport := &RedisTransport{
 		client:      client,
 		streamName:  streamName,
@@ -309,8 +313,7 @@ func (t *RedisTransport) Close() (err error) {
 			defer t.Unlock()
 			close(t.closed)
 			for subscriber := range t.subscribers {
-				subscriber.Disconnect()
-				delete(t.subscribers, subscriber)
+				t.closeSubscriberChannel(subscriber)
 			}
 		})
 	}
@@ -320,7 +323,11 @@ func (t *RedisTransport) Close() (err error) {
 func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSequenceID string) {
 	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, lastSequenceID}, Count: 1, Block: 0}
 
-	client, _, _ := createRedisClient(t.url)
+	client, _, _, err := createRedisClient(t.url)
+	if err != nil {
+		t.closeSubscriberChannel(subscriber)
+		return
+	}
 	defer client.Close()
 
 	for {

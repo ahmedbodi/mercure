@@ -13,6 +13,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unrolled/secure"
 	"golang.org/x/crypto/acme/autocert"
+    _ "net/http/pprof"
 )
 
 const defaultHubURL = "/.well-known/mercure"
