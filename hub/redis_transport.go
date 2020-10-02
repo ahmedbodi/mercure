@@ -145,12 +145,10 @@ func (t *RedisTransport) Dispatch(update *Update) error {
 		return err
 	}
 
-	log.Info(fmt.Sprintf("Update Persisted. Entry ID: %s\n", update.ID))
-
 	for subscriber := range t.subscribers {
 		if !subscriber.Dispatch(update, false) {
 			t.closeSubscriberChannel(subscriber)
-			log.Warn(fmt.Sprintf("Couldn't Dispatch Entry ID: %s. Connection Closed to Subscriber: %s\n", update.ID, subscriber.ID))
+			log.Warnf("Couldn't Dispatch Entry ID: %s. Connection Closed to Subscriber: %s\n", update.ID, subscriber.ID)
 		}
 	}
 
@@ -334,21 +332,20 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 		select {
 		case <-t.closed:
 			t.closeSubscriberChannel(subscriber)
-			log.Info(fmt.Sprintf("Closing Transport. Entry ID: %s\n", streamArgs.Streams[1]))
+			log.Debugf("Closing Transport. Entry ID: %s\n", streamArgs.Streams[1])
 			return
 		case <-subscriber.disconnected:
 			t.closeSubscriberChannel(subscriber)
-			log.Info(fmt.Sprintf("Subscriber Disconnected. Entry ID: %s\n", streamArgs.Streams[1]))
+			log.Debugf("Subscriber Disconnected. Entry ID: %s\n", streamArgs.Streams[1])
 			return
 		default:
-			log.Info(fmt.Sprintf("Looking For Messages. Entry ID: %s\n", streamArgs.Streams[1]))
+			log.Debugf("Looking For Messages. Entry ID: %s\n", streamArgs.Streams[1])
 
 			streams, err := client.XRead(streamArgs).Result()
 			if err != nil {
-				log.Error(fmt.Errorf("[Redis] XREAD error: %w", err))
+				log.Errorf("[Redis] XREAD error: %w", err)
 				continue
 			}
-			log.Info(fmt.Sprintf("Event Found. Last Entry ID: %s\n", streamArgs.Streams[1]))
 
 			// If we get an error in this block we dont exit
 			// We do this incase there's some sort of inconsistency in the redis data allowing us to keep the client connected
@@ -357,14 +354,14 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 			message, ok := entry.Values["data"]
 			if !ok {
 				streamArgs.Streams[1] = entry.ID
-				log.Warn(fmt.Sprintf("Couldn't Decode Entry. Last Entry ID: %s\n", streamArgs.Streams[1]))
+				log.Warnf("Couldn't Decode Entry. Last Entry ID: %s\n", streamArgs.Streams[1])
 				continue
 			}
 
 			var update *Update
 			if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
 				streamArgs.Streams[1] = entry.ID
-				log.Warn(fmt.Sprintf("Couldn't JSON Load Entry ID: %s\n", entry.ID))
+				log.Warnf("Couldn't JSON Load Entry ID: %s\n", entry.ID)
 				continue
 			}
 
@@ -372,11 +369,11 @@ func (t *RedisTransport) SubscribeToMessageStream(subscriber *Subscriber, lastSe
 				// This is the only place where we close the connection
 				// If this errors out, it means the clients gone. we shouldnt run this anymore
 				t.closeSubscriberChannel(subscriber)
-				log.Warn(fmt.Sprintf("Couldn't Dispatch Entry ID: %s. Connection Closed to Subscriber: %s\n", entry.ID, subscriber.ID))
+				log.Warnf("Couldn't Dispatch Entry ID: %s. Connection Closed to Subscriber: %s\n", entry.ID, subscriber.ID)
 				return
 			}
 
-			log.Info(fmt.Sprintf("Event Transmitted. ID: %s\n", entry.ID))
+			log.Debugf("Event Transmitted. ID: %s\n", entry.ID)
 			subscriber.responseLastEventID <- entry.ID
 			streamArgs.Streams[1] = entry.ID
 		}
