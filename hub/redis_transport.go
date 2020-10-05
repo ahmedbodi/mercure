@@ -206,6 +206,7 @@ func (t *RedisTransport) AddSubscriber(s *Subscriber) error {
 	if s.RequestLastEventID != "" {
 		t.dispatchHistory(s, toSeq)
 	}
+	s.historySent = true
 	return nil
 }
 
@@ -351,6 +352,7 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 
 			for subscriber := range t.subscribers {
 				if !subscriber.historySent {
+					log.Infof("Subscriber %s is still receiving history\n", subscriber.ID)
 					continue
 				}
 
