@@ -146,14 +146,6 @@ func (t *RedisTransport) Dispatch(update *Update) error {
 	if err := t.persist(update.ID, updateJSON); err != nil {
 		return err
 	}
-
-	for subscriber := range t.subscribers {
-		if !subscriber.Dispatch(update, false) {
-			t.closeSubscriberChannel(subscriber)
-			log.Warnf("Couldn't Dispatch Entry ID: %s. Connection Closed to Subscriber: %s\n", update.ID, subscriber.ID)
-		}
-	}
-
 	return nil
 }
 
