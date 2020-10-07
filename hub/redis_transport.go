@@ -33,7 +33,6 @@ type RedisTransport struct {
 	lastSeq     string
 	lastEventID string
 	url         *url.URL
-	publishDuringDispatch bool
 }
 
 
@@ -105,6 +104,7 @@ func NewRedisTransport(u *url.URL) (*RedisTransport, error) {
 		subscribers: make(map[*Subscriber]struct{}),
 		closed:      make(chan struct{}),
 		lastEventID: getLastEventID(client, streamName),
+		lastSeq:     "+",
 	}
 
 	go transport.SubscribeToMessageStream()
@@ -200,6 +200,8 @@ func (t *RedisTransport) AddSubscriber(s *Subscriber) error {
 	toSeq := t.lastSeq
 	t.Unlock()
 
+	log.Infof("Subscribers: %s\n", t.subscribers)
+	
 	// If a Last-Event-ID is given we will send out the history
 	// Then we initiale the Subscriber Goroutine
 	// If it isnt given then we start it straight away
@@ -361,10 +363,11 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 					// If this errors out, it means the clients gone. we shouldnt run this anymore
 					t.closeSubscriberChannel(subscriber)
 					log.Warnf("Couldn't Dispatch Entry ID: %s. Connection Closed to Subscriber: %s\n", entry.ID, subscriber.ID)
+					continue
 				}
 
 				log.Debugf("Event Transmitted. ID: %s\n", entry.ID)
-				subscriber.responseLastEventID <- entry.ID
+				subscriber.responseLastEventID <- update.ID
 				subscriber.lastSentEventId = entry.ID
 			}
 
