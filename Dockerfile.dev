@@ -1,0 +1,18 @@
+# Compile stage
+FROM golang:1.14 AS build-env
+ADD . /dockerdev
+WORKDIR /dockerdev
+RUN go build -o /server
+
+# Final stage
+FROM debian:buster
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates
+
+RUN update-ca-certificates
+
+EXPOSE 80 443 3000
+WORKDIR /
+COPY --from=build-env /server /
+CMD ["/server"]
