@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"runtime"
 	"strconv"
 	"sync"
 
@@ -200,7 +201,7 @@ func (t *RedisTransport) AddSubscriber(s *Subscriber) error {
 	toSeq := t.lastSeq
 	t.Unlock()
 
-	log.Infof("Subscribers: %s\n", t.subscribers)
+	log.Infof("Subscribers: %v\n", t.subscribers)
 	
 	// If a Last-Event-ID is given we will send out the history
 	// Then we initiale the Subscriber Goroutine
@@ -352,7 +353,8 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 				continue
 			}
 
-			for subscriber := range t.subscribers {
+			_, subscribers := t.GetSubscribers()
+			for _, subscriber := range subscribers {
 				if !subscriber.historySent {
 					log.Infof("Subscriber %s is still receiving history\n", subscriber.ID)
 					continue
@@ -380,6 +382,9 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 func (t *RedisTransport) closeSubscriberChannel(subscriber *Subscriber) {
 	t.Lock()
 	defer t.Unlock()
-	subscriber.Disconnect()
+	log.Printf("Closing Subscriber: %s\n", subscriber.ID)
+	log.Printf("Subscriber List: %v\n", t.subscribers)
 	delete(t.subscribers, subscriber)
+	log.Printf("After Close. Subscriber List: %v\n", t.subscribers)
+	runtime.GC()
 }
