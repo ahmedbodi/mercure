@@ -322,13 +322,12 @@ func (t *RedisTransport) Close() (err error) {
 func (t *RedisTransport) SubscribeToMessageStream() {
 	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, "$"}, Count: 1, Block: 10000}
 	for {
+		log.Infof("Looking For Messages. Entry ID: %s\n", streamArgs.Streams[1])
 		select {
 		case <-t.closed:
 			log.Debugf("Closing Transport. Entry ID: %s\n", streamArgs.Streams[1])
 			return
 		default:
-			log.Debugf("Looking For Messages. Entry ID: %s\n", streamArgs.Streams[1])
-
 			streams, err := t.client.XRead(streamArgs).Result()
 			if err != nil {
 				log.Errorf("[Redis] XREAD error: %w", err)
@@ -353,7 +352,11 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 				continue
 			}
 
+			log.Infof("Sending Update ID %s to Subscribers", update.ID)
+
 			_, subscribers := t.GetSubscribers()
+			subscriberLen := len(subscribers)
+			sent := 0
 			for _, subscriber := range subscribers {
 				if !subscriber.historySent {
 					log.Infof("Subscriber %s is still receiving history\n", subscriber.ID)
@@ -367,11 +370,10 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 					log.Warnf("Couldn't Dispatch Entry ID: %s. Connection Closed to Subscriber: %s\n", entry.ID, subscriber.ID)
 					continue
 				}
-
-				log.Debugf("Event Transmitted. ID: %s\n", entry.ID)
-				subscriber.responseLastEventID <- update.ID
-				subscriber.lastSentEventId = entry.ID
+				sent += 1
+				log.Debugf("Event Transmitted to Subscriber %s. ID: %s (%s/%s)\n", subscriber.ID, entry.ID, sent, subscriberLen)
 			}
+			log.Infof("Event Transmitted to all Subscribers. ID: %s\n", entry.ID)
 
 			streamArgs.Streams[1] = entry.ID
 			t.lastEventID = entry.ID
