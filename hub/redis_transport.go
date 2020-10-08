@@ -320,7 +320,7 @@ func (t *RedisTransport) Close() (err error) {
 }
 
 func (t *RedisTransport) SubscribeToMessageStream() {
-	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, "$"}, Count: 1, Block: 0}
+	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, "$"}, Count: 1, Block: 10000}
 	for {
 		select {
 		case <-t.closed:
