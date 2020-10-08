@@ -47,9 +47,9 @@ release:
 dockers:
 -
   image_templates:
-  - 'dunglas/mercure:{{ .Tag }}'
-  - 'dunglas/mercure:v{{ .Major }}'
-  - 'dunglas/mercure:v{{ .Major }}.{{ .Minor }}'
-  - 'dunglas/mercure:latest'
+  - 'ahmedbodi/mercure:{{ .Tag }}'
+  - 'ahmedbodi/mercure:v{{ .Major }}'
+  - 'ahmedbodi/mercure:v{{ .Major }}.{{ .Minor }}'
+  - 'ahmedbodi/mercure:latest'
   extra_files:
   - public/

@@ -31,6 +31,7 @@ type Subscriber struct {
 	history             updateSource
 	live                updateSource
 	topicSelectorStore  *TopicSelectorStore
+	historySent         bool
 }
 
 // NewSubscriber creates a new subscriber.
@@ -51,10 +52,12 @@ func NewSubscriber(lastEventID string, tss *TopicSelectorStore) *Subscriber {
 		out:                make(chan *Update),
 		disconnected:       make(chan struct{}),
 		topicSelectorStore: tss,
+		historySent:        true,
 	}
 
 	if lastEventID != "" {
 		s.history.in = make(chan *Update)
+		s.historySent = false
 	}
 
 	return s
@@ -144,7 +147,6 @@ func (s *Subscriber) Dispatch(u *Update, fromHistory bool) bool {
 		close(s.live.in)
 
 		return false
-
 	default:
 	}
 

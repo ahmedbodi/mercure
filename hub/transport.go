@@ -55,6 +55,12 @@ func NewTransport(config *viper.Viper) (Transport, error) {
 
 	case "bolt":
 		return NewBoltTransport(u)
+
+	case "redis":
+		return NewRedisTransport(u)
+
+	case "rediss":
+		return NewRedisTransport(u)
 	}
 
 	return nil, fmt.Errorf("%q: no such transport available: %w", tu, ErrInvalidTransportDSN)
