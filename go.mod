@@ -8,6 +8,7 @@ require (
 	github.com/gofrs/uuid v3.3.0+incompatible
 	github.com/gorilla/handlers v1.4.2
 	github.com/gorilla/mux v1.7.4
+	github.com/hashicorp/serf v0.8.2
 	github.com/joonix/log v0.0.0-20200409080653-9c1d2ceb5f1d
 	github.com/mitchellh/mapstructure v1.3.2 // indirect
 	github.com/onsi/ginkgo v1.14.0 // indirect

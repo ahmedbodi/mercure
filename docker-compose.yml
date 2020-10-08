@@ -1,0 +1,49 @@
+version: '2'
+
+services:
+  redis:
+    image: 'redis:latest'
+    command: redis-server
+    volumes:
+      - 'redis:/var/lib/redis/data'
+    expose:
+      - 6379
+
+  mercure_publishing_hub:
+    build: .
+    expose:
+      - 3000
+    environment:
+      - JWT_KEY=!ChangeMe!
+      - DEMO=1
+      - ALLOW_ANONYMOUS=1
+      - CORS_ALLOWED_ORIGINS=*
+      - PUBLISH_ALLOWED_ORIGINS=*
+      - TRANSPORT_URL=redis://redis
+
+  mercure_subscription_hub:
+    build: .
+    expose:
+      - 3000
+    environment:
+      - JWT_KEY=!ChangeMe!
+      - DEMO=1
+      - ALLOW_ANONYMOUS=1
+      - CORS_ALLOWED_ORIGINS=*
+      - PUBLISH_ALLOWED_ORIGINS=*
+      - TRANSPORT_URL=redis://redis
+
+  publisher:
+    build: ./contrib/publisher
+    volumes:
+      - ./contrib/publisher/:/usr/src/app
+      - /usr/src/app/node_modules
+
+  subscriber:
+    build: ./contrib/subscriber
+    volumes:
+      - ./contrib/subscriber/:/usr/src/app
+      - /usr/src/app/node_modules
+
+volumes:
+  redis:
