@@ -31,7 +31,6 @@ type Subscriber struct {
 	history             updateSource
 	live                updateSource
 	topicSelectorStore  *TopicSelectorStore
-	lastSentEventId     string
 	historySent         bool
 }
 
@@ -53,7 +52,6 @@ func NewSubscriber(lastEventID string, tss *TopicSelectorStore) *Subscriber {
 		out:                make(chan *Update),
 		disconnected:       make(chan struct{}),
 		topicSelectorStore: tss,
-		lastSentEventId:    "$",
 		historySent:        true,
 	}
 

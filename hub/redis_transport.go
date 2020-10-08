@@ -36,7 +36,6 @@ type RedisTransport struct {
 	url         *url.URL
 }
 
-
 func createRedisClient(u *url.URL) (*redis.Client, string, int64, error) {
 	var err error
 	q := u.Query()
@@ -57,18 +56,18 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64, error) {
 	if sizeParameter != "" {
 		size, err = strconv.ParseInt(sizeParameter, 10, 64)
 		if err != nil {
-			log.Errorf(`%q: invalid "size" parameter %q: %s: %w\n`, u, sizeParameter, err, ErrInvalidTransportDSN)
+			log.Errorf(`%q: invalid "size" parameter %q: %s: %w`, u, sizeParameter, err, ErrInvalidTransportDSN)
 			return nil, streamName, 0, err
 		}
 		q.Del("size")
 	}
 
-	fmt.Printf("Limiting Redis Queue Size to %d\n", size)
+	fmt.Printf("Limiting Redis Queue Size to %d", size)
 	u.RawQuery = q.Encode()
 
 	redisOptions, err := redis.ParseURL(u.String())
 	if err != nil {
-		log.Errorf(`%q: invalid "redis" dsn %q: %w\n`, u, u.String(), ErrInvalidTransportDSN)
+		log.Errorf(`%q: invalid "redis" dsn %q: %w`, u, u.String(), ErrInvalidTransportDSN)
 		return nil, streamName, 0, err
 	}
 	var client *redis.Client
@@ -84,7 +83,7 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64, error) {
 	}
 
 	if _, err := client.Ping().Result(); err != nil {
-		log.Errorf(`%q: redis connection error "%s": %w\n`, u, err, ErrInvalidTransportDSN)
+		log.Errorf(`%q: redis connection error "%s": %w`, u, err, ErrInvalidTransportDSN)
 		return nil, streamName, 0, err
 	}
 	return client, streamName, size, err
@@ -201,8 +200,6 @@ func (t *RedisTransport) AddSubscriber(s *Subscriber) error {
 	toSeq := t.lastSeq
 	t.Unlock()
 
-	log.Infof("Subscribers: %v\n", t.subscribers)
-	
 	// If a Last-Event-ID is given we will send out the history
 	// Then we initiale the Subscriber Goroutine
 	// If it isnt given then we start it straight away
@@ -293,12 +290,10 @@ func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
 			return
 		}
 		responseLastEventID = entry.ID
-		s.lastSentEventId = entry.ID
 	}
 
 	s.HistoryDispatched(responseLastEventID)
 	s.historySent = true
-	return
 }
 
 // Close closes the Transport.
@@ -322,10 +317,10 @@ func (t *RedisTransport) Close() (err error) {
 func (t *RedisTransport) SubscribeToMessageStream() {
 	streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, "$"}, Count: 1, Block: 10000}
 	for {
-		log.Infof("Looking For Messages. Entry ID: %s\n", streamArgs.Streams[1])
+		log.Infof("Looking For Messages. Entry ID: %s", streamArgs.Streams[1])
 		select {
 		case <-t.closed:
-			log.Debugf("Closing Transport. Entry ID: %s\n", streamArgs.Streams[1])
+			log.Debugf("Closing Transport. Entry ID: %s", streamArgs.Streams[1])
 			return
 		default:
 			streams, err := t.client.XRead(streamArgs).Result()
@@ -341,14 +336,14 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 			message, ok := entry.Values["data"]
 			if !ok {
 				streamArgs.Streams[1] = entry.ID
-				log.Warnf("Couldn't Decode Entry. Last Entry ID: %s\n", streamArgs.Streams[1])
+				log.Warnf("Couldn't Decode Entry. Last Entry ID: %s", streamArgs.Streams[1])
 				continue
 			}
 
 			var update *Update
 			if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
 				streamArgs.Streams[1] = entry.ID
-				log.Warnf("Couldn't JSON Load Entry ID: %s\n", entry.ID)
+				log.Warnf("Couldn't JSON Load Entry ID: %s", entry.ID)
 				continue
 			}
 
@@ -357,9 +352,10 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 			_, subscribers := t.GetSubscribers()
 			subscriberLen := len(subscribers)
 			sent := 0
+
 			for _, subscriber := range subscribers {
 				if !subscriber.historySent {
-					log.Infof("Subscriber %s is still receiving history\n", subscriber.ID)
+					log.Infof("Subscriber %s is still receiving history", subscriber.ID)
 					continue
 				}
 
@@ -367,13 +363,13 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 					// This is the only place where we close the connection
 					// If this errors out, it means the clients gone. we shouldnt run this anymore
 					t.closeSubscriberChannel(subscriber)
-					log.Warnf("Couldn't Dispatch Entry ID: %s. Connection Closed to Subscriber: %s\n", entry.ID, subscriber.ID)
+					log.Warnf("Couldn't Dispatch Entry ID: %s. Connection Closed to Subscriber: %s", entry.ID, subscriber.ID)
 					continue
 				}
-				sent += 1
-				log.Debugf("Event Transmitted to Subscriber %s. ID: %s (%s/%s)\n", subscriber.ID, entry.ID, sent, subscriberLen)
+				sent++
+				log.Debugf("Event Transmitted to Subscriber %s. ID: %s (%d/%d)", subscriber.ID, entry.ID, sent, subscriberLen)
 			}
-			log.Infof("Event Transmitted to all Subscribers. ID: %s\n", entry.ID)
+			log.Infof("Event Transmitted to all Subscribers. ID: %s", entry.ID)
 
 			streamArgs.Streams[1] = entry.ID
 			t.lastEventID = entry.ID
@@ -384,9 +380,9 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 func (t *RedisTransport) closeSubscriberChannel(subscriber *Subscriber) {
 	t.Lock()
 	defer t.Unlock()
-	log.Printf("Closing Subscriber: %s\n", subscriber.ID)
-	log.Printf("Subscriber List: %v\n", t.subscribers)
+	log.Printf("Closing Subscriber: %s", subscriber.ID)
+	log.Printf("Subscriber List: %v", t.subscribers)
 	delete(t.subscribers, subscriber)
-	log.Printf("After Close. Subscriber List: %v\n", t.subscribers)
+	log.Printf("After Close. Subscriber List: %v", t.subscribers)
 	runtime.GC()
 }
