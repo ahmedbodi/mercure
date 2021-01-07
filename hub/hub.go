@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/spf13/viper"
+	"github.com/getsentry/sentry-go"
 )
 
 // Hub stores channels with clients currently subscribed and allows to dispatch updates.
@@ -32,6 +33,18 @@ func NewHub(v *viper.Viper) (*Hub, error) {
 		return nil, err
 	}
 
+	if dsn := v.GetString("sentry_dsn"); dsn != "" {
+		err := sentry.Init(sentry.ClientOptions{
+			// Either set your DSN here or set the SENTRY_DSN environment variable.
+			Dsn: dsn,
+			// Enable printing of SDK debug messages.
+			// Useful when getting started or trying to figure something out.
+			Debug: true,
+		})
+		if err != nil {
+			log.Fatalf("sentry.Init: %s", err)
+		}
+	}
 	return NewHubWithTransport(v, t, NewTopicSelectorStore()), nil
 }
 

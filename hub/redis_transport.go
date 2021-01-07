@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-redis/redis"
 	log "github.com/sirupsen/logrus"
+	"github.com/getsentry/sentry-go"
 )
 
 const defaultRedisStreamName = "mercure-hub-updates"
@@ -27,11 +28,13 @@ func redisNilToNil(err error) error {
 func checkErr(err error) {
 	if err == nil {
 		return
-
 	} else if netError, ok := err.(net.Error); ok && netError.Timeout() {
 		log.Error("Timeout Connecting to Redis")
+		sentry.CaptureException(err)
 		return
 	}
+
+	sentry.CaptureException(err)
 
 	switch t := err.(type) {
 	case *net.OpError:
@@ -281,6 +284,7 @@ func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
 		var err error
 		fromSeq, err = t.client.LIndex(t.cacheKeyID(fromSeq), 0).Result()
 		if err != nil {
+			sentry.CaptureException(err)
 			s.HistoryDispatched(responseLastEventID)
 			s.historySent = true
 			return
@@ -290,6 +294,7 @@ func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
 		streamArgs := &redis.XReadArgs{Streams: []string{t.streamName, fromSeq}, Count: 1, Block: 0}
 		result, err := t.client.XRead(streamArgs).Result()
 		if err != nil {
+			sentry.CaptureException(err)
 			s.HistoryDispatched(responseLastEventID)
 			s.historySent = true
 			return
@@ -301,6 +306,7 @@ func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
 
 	messages, err := t.client.XRange(t.streamName, fromSeq, toSeq).Result()
 	if err != nil {
+		sentry.CaptureException(err)
 		s.HistoryDispatched(responseLastEventID)
 		s.historySent = true
 		return
@@ -362,6 +368,7 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 		default:
 			streams, err := t.client.XRead(streamArgs).Result()
 			if err != nil {
+				sentry.CaptureException(err)
 				checkErr(err)
 				log.Errorf("[Redis] XREAD error: %w", err)
 				continue
@@ -381,6 +388,7 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 			var update *Update
 			if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
 				streamArgs.Streams[1] = entry.ID
+				sentry.CaptureException(err)
 				log.Warnf("Couldn't JSON Load Entry ID: %s", entry.ID)
 				continue
 			}

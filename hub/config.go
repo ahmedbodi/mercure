@@ -32,6 +32,7 @@ func SetConfigDefaults(v *viper.Viper) {
 	v.SetDefault("metrics", false)
 	v.SetDefault("metrics_login", "mercure")
 	v.SetDefault("metrics_password", "")
+	v.SetDefault("sentry_dsn", "")
 }
 
 // ValidateConfig validates a Viper instance.
@@ -87,7 +88,7 @@ func SetFlags(fs *pflag.FlagSet, v *viper.Viper) {
 	fs.BoolP("metrics", "m", false, "enable metrics")
 	fs.StringP("metrics_login", "", "mercure", "the user login allowed to access metrics")
 	fs.StringP("metrics_password", "", "", "the user password allowed to access metrics")
-
+	fs.StringP("sentry_dsn", "", "", "dsn string to connect to sentry")
 	fs.VisitAll(func(f *pflag.Flag) {
 		v.BindPFlag(strings.ReplaceAll(f.Name, "-", "_"), fs.Lookup(f.Name))
 	})
