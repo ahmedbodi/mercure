@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/url"
 	"runtime"
 	"strconv"
 	"sync"
+	"syscall"
 
 	"github.com/go-redis/redis"
 	log "github.com/sirupsen/logrus"
@@ -20,6 +22,30 @@ func redisNilToNil(err error) error {
 		return nil
 	}
 	return err
+}
+
+func checkErr(err error) {
+	if err == nil {
+		return
+
+	} else if netError, ok := err.(net.Error); ok && netError.Timeout() {
+		log.Error("Timeout Connecting to Redis")
+		return
+	}
+
+	switch t := err.(type) {
+	case *net.OpError:
+		if t.Op == "dial" {
+			log.Error("Unknown host while connecting to redis")
+		} else if t.Op == "read" {
+			log.Error("Connection Refused")
+		}
+
+	case syscall.Errno:
+		if t == syscall.ECONNREFUSED {
+			log.Error("Connection Refused while connecting to redis ")
+		}
+	}
 }
 
 // RedisTransport implements the TransportInterface using the Redis database.
@@ -67,6 +93,7 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64, error) {
 
 	redisOptions, err := redis.ParseURL(u.String())
 	if err != nil {
+		checkErr(err)
 		log.Errorf(`%q: invalid "redis" dsn %q: %w`, u, u.String(), ErrInvalidTransportDSN)
 		return nil, streamName, 0, err
 	}
@@ -82,7 +109,17 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64, error) {
 		client = redis.NewClient(redisOptions)
 	}
 
+	client.Set("connection-test", true, 0)
+	value, err := client.Get("connection-test").Result()
+	checkErr(err)
+
+	if true {
+		log.Printf("Redis Connection Test: Value: %s", value)
+	}
+
+
 	if _, err := client.Ping().Result(); err != nil {
+		checkErr(err)
 		log.Errorf(`%q: redis connection error "%s": %w`, u, err, ErrInvalidTransportDSN)
 		return nil, streamName, 0, err
 	}
@@ -325,6 +362,7 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 		default:
 			streams, err := t.client.XRead(streamArgs).Result()
 			if err != nil {
+				checkErr(err)
 				log.Errorf("[Redis] XREAD error: %w", err)
 				continue
 			}
