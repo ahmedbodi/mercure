@@ -33,6 +33,8 @@ func SetConfigDefaults(v *viper.Viper) {
 	v.SetDefault("metrics_login", "mercure")
 	v.SetDefault("metrics_password", "")
 	v.SetDefault("sentry_dsn", "")
+	v.SetDefault("newrelic_license", "")
+	v.SetDefault("newrelic_name", "")
 }
 
 // ValidateConfig validates a Viper instance.
@@ -55,6 +57,12 @@ func ValidateConfig(v *viper.Viper) error {
 		}
 	}
 
+	if v.GetString("newrelic_license") != "" && v.GetString("newrelic_name") == "" {
+		return fmt.Errorf(`%w: if the "newrelic_license" configuration parameter is defined, "newrelic_name" must be defined too`, ErrInvalidConfig)
+	}
+	if v.GetString("newrelic_name") != "" && v.GetString("newrelic_license") == "" {
+		return fmt.Errorf(`%w: if the "newrelic_name" configuration parameter is defined, "newrelic_license" must be defined too`, ErrInvalidConfig)
+	}
 	return nil
 }
 
@@ -89,6 +97,8 @@ func SetFlags(fs *pflag.FlagSet, v *viper.Viper) {
 	fs.StringP("metrics_login", "", "mercure", "the user login allowed to access metrics")
 	fs.StringP("metrics_password", "", "", "the user password allowed to access metrics")
 	fs.StringP("sentry_dsn", "", "", "dsn string to connect to sentry")
+	fs.StringP("newrelic_license", "", "", "newrelic license key")
+	fs.StringP("newrelic_name", "", "", "newrelic application name")
 	fs.VisitAll(func(f *pflag.Flag) {
 		v.BindPFlag(strings.ReplaceAll(f.Name, "-", "_"), fs.Lookup(f.Name))
 	})
