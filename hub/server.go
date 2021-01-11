@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"net/http"
 	"os"
 	"os/signal"
@@ -107,8 +108,8 @@ func (h *Hub) chainHandlers(acmeHosts []string) http.Handler {
 	r := mux.NewRouter()
 	h.registerSubscriptionHandlers(r)
 
-	r.HandleFunc(defaultHubURL, h.SubscribeHandler).Methods("GET", "HEAD")
-	r.HandleFunc(defaultHubURL, h.PublishHandler).Methods("POST")
+	r.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, defaultHubURL, h.SubscribeHandler)).Methods("GET", "HEAD")
+	r.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, defaultHubURL, h.PublishHandler)).Methods("POST")
 
 	csp := "default-src 'self'"
 	if debug || h.config.GetBool("demo") {
@@ -116,7 +117,7 @@ func (h *Hub) chainHandlers(acmeHosts []string) http.Handler {
 		r.PathPrefix("/").Handler(http.FileServer(http.Dir("public")))
 		csp += " mercure.rocks cdn.jsdelivr.net"
 	} else {
-		r.HandleFunc("/", welcomeHandler).Methods("GET", "HEAD")
+		r.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, "/", welcomeHandler)).Methods("GET", "HEAD")
 	}
 
 	secureMiddleware := secure.New(secure.Options{
