@@ -325,7 +325,7 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 		default:
 			streams, err := t.client.XRead(streamArgs).Result()
 			if err != nil {
-				log.Errorf("[Redis] XREAD error: %w", err)
+				log.Debugf("[Redis] XREAD error: %w", err)
 				continue
 			}
 
@@ -380,9 +380,9 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 func (t *RedisTransport) closeSubscriberChannel(subscriber *Subscriber) {
 	t.Lock()
 	defer t.Unlock()
-	log.Printf("Closing Subscriber: %s", subscriber.ID)
-	log.Printf("Subscriber List: %v", t.subscribers)
+	log.Debugf("Closing Subscriber: %s", subscriber.ID)
+	log.Debugf("Subscriber List: %v", t.subscribers)
 	delete(t.subscribers, subscriber)
-	log.Printf("After Close. Subscriber List: %v", t.subscribers)
+	log.Debugf("After Close. Subscriber List: %v", t.subscribers)
 	runtime.GC()
 }
