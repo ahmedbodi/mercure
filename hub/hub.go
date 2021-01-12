@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/spf13/viper"
+	"github.com/getsentry/sentry-go"
+	"github.com/newrelic/go-agent/v3/newrelic"
 )
 
 // Hub stores channels with clients currently subscribed and allows to dispatch updates.
@@ -14,6 +16,7 @@ type Hub struct {
 	server             *http.Server
 	topicSelectorStore *TopicSelectorStore
 	metrics            *Metrics
+	newrelicApp        *newrelic.Application
 }
 
 // Stop stops disconnect all connected clients.
@@ -32,17 +35,44 @@ func NewHub(v *viper.Viper) (*Hub, error) {
 		return nil, err
 	}
 
-	return NewHubWithTransport(v, t, NewTopicSelectorStore()), nil
+	if dsn := v.GetString("sentry_dsn"); dsn != "" {
+		err := sentry.Init(sentry.ClientOptions{
+			// Either set your DSN here or set the SENTRY_DSN environment variable.
+			Dsn: dsn,
+			// Enable printing of SDK debug messages.
+			// Useful when getting started or trying to figure something out.
+			Debug: true,
+		})
+		if err != nil {
+			log.Fatalf("sentry.Init: %s", err)
+		}
+	}
+
+	var app *newrelic.Application
+	if license := v.GetString("newrelic_license"); license != "" {
+		log.Printf("Setting up NewRelic as %s with license %s", v.GetString("newrelic_name"), v.GetString("newrelic_license"))
+		app, err = newrelic.NewApplication(
+			newrelic.ConfigAppName(v.GetString("newrelic_name")),
+			newrelic.ConfigLicense(license),
+			newrelic.ConfigDistributedTracerEnabled(true),
+		)
+
+		if err != nil {
+			log.Fatalf("newrelic.Init: %s", err)
+		}
+	}
+	return NewHubWithTransport(v, t, app, NewTopicSelectorStore()), nil
 }
 
 // NewHubWithTransport creates a hub.
-func NewHubWithTransport(v *viper.Viper, t Transport, tss *TopicSelectorStore) *Hub {
+func NewHubWithTransport(v *viper.Viper, t Transport, nrApp *newrelic.Application, tss *TopicSelectorStore) *Hub {
 	return &Hub{
 		v,
 		t,
 		nil,
 		tss,
 		NewMetrics(),
+		nrApp,
 	}
 }
 
