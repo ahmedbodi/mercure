@@ -14,6 +14,7 @@ import (
 	"github.com/unrolled/secure"
 	"golang.org/x/crypto/acme/autocert"
     _ "net/http/pprof"
+	"github.com/newrelic/go-agent/v3/newrelic"
 )
 
 const defaultHubURL = "/.well-known/mercure"
@@ -107,8 +108,8 @@ func (h *Hub) chainHandlers(acmeHosts []string) http.Handler {
 	r := mux.NewRouter()
 	h.registerSubscriptionHandlers(r)
 
-	r.HandleFunc(defaultHubURL, h.SubscribeHandler).Methods("GET", "HEAD")
-	r.HandleFunc(defaultHubURL, h.PublishHandler).Methods("POST")
+	r.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, defaultHubURL, h.SubscribeHandler)).Methods("GET", "HEAD")
+	r.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, defaultHubURL, h.PublishHandler)).Methods("POST")
 
 	csp := "default-src 'self'"
 	if debug || h.config.GetBool("demo") {
@@ -116,7 +117,7 @@ func (h *Hub) chainHandlers(acmeHosts []string) http.Handler {
 		r.PathPrefix("/").Handler(http.FileServer(http.Dir("public")))
 		csp += " mercure.rocks cdn.jsdelivr.net"
 	} else {
-		r.HandleFunc("/", welcomeHandler).Methods("GET", "HEAD")
+		r.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, "/", welcomeHandler)).Methods("GET", "HEAD")
 	}
 
 	secureMiddleware := secure.New(secure.Options{
@@ -174,9 +175,9 @@ func (h *Hub) registerSubscriptionHandlers(r *mux.Router) {
 	r.UseEncodedPath()
 	r.SkipClean(true)
 
-	r.HandleFunc(subscriptionURL, h.SubscriptionHandler).Methods("GET")
-	r.HandleFunc(subscriptionsForTopicURL, h.SubscriptionsHandler).Methods("GET")
-	r.HandleFunc(subscriptionsURL, h.SubscriptionsHandler).Methods("GET")
+	r.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, subscriptionURL, h.SubscriptionHandler)).Methods("GET")
+	r.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, subscriptionsForTopicURL, h.SubscriptionsHandler)).Methods("GET")
+	r.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, subscriptionsURL, h.SubscriptionsHandler)).Methods("GET")
 }
 
 func (h *Hub) baseHandler(acmeHosts []string) http.Handler {
@@ -185,9 +186,9 @@ func (h *Hub) baseHandler(acmeHosts []string) http.Handler {
 	mainRouter.SkipClean(true)
 
 	// Register /healthz and /metrics (if enabledà in way that doesn't pollute the HTTP logs.
-	mainRouter.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+	mainRouter.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, "/healthz", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "ok")
-	}).Methods("GET", "HEAD")
+	})).Methods("GET", "HEAD")
 
 	if h.config.GetBool("metrics") {
 		r := mainRouter.PathPrefix("/").Subrouter()
