@@ -62,7 +62,7 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64, error) {
 		q.Del("size")
 	}
 
-	fmt.Printf("Limiting Redis Queue Size to %d", size)
+	log.Infof("Limiting Redis Queue Size to %d", size)
 	u.RawQuery = q.Encode()
 
 	redisOptions, err := redis.ParseURL(u.String())
@@ -164,12 +164,19 @@ func (t *RedisTransport) persist(updateID string, updateJSON []byte) error {
 		//  - If the length of that list is 0
 		//     - Delete that key
 		script = `
+			local streamName = KEYS[1]
+			local updateId = KEYS[2]
+			local trackingListKey = KEYS[3]
+
 			local limit = tonumber(ARGV[1])
-			local entryId = redis.call("XADD", KEYS[1], "*", "MAXLEN", ARGV[1], "data", ARGV[2])
-			redis.call("RPUSH", KEYS[2], entryId)
-			redis.call("RPUSH", KEYS[3], KEYS[2])
-			while (redis.call("LLEN", KEYS[3]) > limit) do
-				local key = redis.call("LPOP", KEYS[3])
+			local data = ARGV[2]
+
+			local entryId = redis.call("XADD", streamName, "MAXLEN", limit, "*", "data", data)
+			redis.call("RPUSH", updateId, entryId)
+			redis.call("RPUSH", trackingListKey, updateId)
+
+			while (redis.call("LLEN", trackingListKey) > limit) do
+				local key = redis.call("LPOP", trackingListKey)
 				redis.call("LPOP", key)
 				if redis.call("LLEN", key) == 0 then
 					redis.call("DEL", key)
