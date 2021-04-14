@@ -1,8 +1,10 @@
 package hub
 
 import (
+	"github.com/dunglas/mercure/common"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/spf13/viper"
 	"github.com/getsentry/sentry-go"
@@ -39,6 +41,7 @@ func NewHub(v *viper.Viper) (*Hub, error) {
 		err := sentry.Init(sentry.ClientOptions{
 			// Either set your DSN here or set the SENTRY_DSN environment variable.
 			Dsn: dsn,
+			Release: common.AppVersion.Shortline(),
 			// Enable printing of SDK debug messages.
 			// Useful when getting started or trying to figure something out.
 			Debug: true,
@@ -46,6 +49,7 @@ func NewHub(v *viper.Viper) (*Hub, error) {
 		if err != nil {
 			log.Fatalf("sentry.Init: %s", err)
 		}
+		defer sentry.Flush(2 * time.Second)
 	}
 
 	var app *newrelic.Application
@@ -80,11 +84,13 @@ func NewHubWithTransport(v *viper.Viper, t Transport, nrApp *newrelic.Applicatio
 func Start() {
 	h, err := NewHub(viper.GetViper())
 	if err != nil {
+		sentry.CaptureException(err)
 		log.Fatalln(err)
 	}
 
 	defer func() {
 		if err = h.Stop(); err != nil {
+			sentry.CaptureException(err)
 			log.Fatalln(err)
 		}
 	}()

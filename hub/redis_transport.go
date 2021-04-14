@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/getsentry/sentry-go"
 	"net/url"
 	"runtime"
 	"strconv"
@@ -56,6 +57,7 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64, error) {
 	if sizeParameter != "" {
 		size, err = strconv.ParseInt(sizeParameter, 10, 64)
 		if err != nil {
+			sentry.CaptureException(err)
 			log.Errorf(`%q: invalid "size" parameter %q: %s: %w`, u, sizeParameter, err, ErrInvalidTransportDSN)
 			return nil, streamName, 0, err
 		}
@@ -67,6 +69,7 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64, error) {
 
 	redisOptions, err := redis.ParseURL(u.String())
 	if err != nil {
+		sentry.CaptureException(err)
 		log.Errorf(`%q: invalid "redis" dsn %q: %w`, u, u.String(), ErrInvalidTransportDSN)
 		return nil, streamName, 0, err
 	}
@@ -83,6 +86,7 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64, error) {
 	}
 
 	if _, err := client.Ping().Result(); err != nil {
+		sentry.CaptureException(err)
 		log.Errorf(`%q: redis connection error "%s": %w`, u, err, ErrInvalidTransportDSN)
 		return nil, streamName, 0, err
 	}
@@ -350,6 +354,7 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 			var update *Update
 			if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
 				streamArgs.Streams[1] = entry.ID
+				sentry.CaptureException(err)
 				log.Warnf("Couldn't JSON Load Entry ID: %s", entry.ID)
 				continue
 			}
