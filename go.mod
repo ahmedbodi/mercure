@@ -8,6 +8,8 @@ require (
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
 	github.com/dunglas/jwt-go v3.2.1-0.20210401222640-f048a7c297bf+incompatible
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
+	github.com/getsentry/sentry-go v0.10.0
+	github.com/go-redis/redis v6.15.9+incompatible
 	github.com/gofrs/uuid v4.0.0+incompatible
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20200217142428-fce0ec30dd00 // indirect
@@ -16,6 +18,7 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/magiconair/properties v1.8.5 // indirect
 	github.com/mitchellh/mapstructure v1.4.1 // indirect
+	github.com/newrelic/go-agent/v3 v3.11.0
 	github.com/pelletier/go-toml v1.8.1 // indirect
 	github.com/prometheus/client_golang v1.10.0
 	github.com/prometheus/client_model v0.2.0
