@@ -4,10 +4,13 @@ package mercure
 
 import (
 	"fmt"
+	"github.com/dunglas/mercure/common"
+	"github.com/getsentry/sentry-go"
 	"net/http"
 	"time"
 
 	"github.com/dunglas/jwt-go"
+	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
@@ -179,6 +182,40 @@ func WithTopicSelectorStore(tss *TopicSelectorStore) Option {
 	}
 }
 
+func WithNewRelic(name string, license string) Option {
+	return func (o *opt) error {
+		nrApp, err := newrelic.NewApplication(
+			newrelic.ConfigAppName(name),
+			newrelic.ConfigLicense(license),
+			newrelic.ConfigDistributedTracerEnabled(true),
+		)
+
+		if err != nil {
+			return fmt.Errorf("error setting up newrelic: %s", err)
+		}
+
+		o.newrelicApp = nrApp
+		return nil
+	}
+}
+
+func WithSentry(value string) Option {
+	return func(o *opt) error {
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn: value,
+			Release: common.AppVersion.Shortline(),
+			Debug: o.debug,
+		})
+
+		if err != nil {
+			return fmt.Errorf("error when setting up sentry: %w", err)
+		}
+
+		defer sentry.Flush(2 * time.Second)
+		return nil
+	}
+}
+
 type jwtConfig struct {
 	key           []byte
 	signingMethod jwt.SigningMethod
@@ -204,6 +241,7 @@ type opt struct {
 	allowedHosts       []string
 	publishOrigins     []string
 	corsOrigins        []string
+	newrelicApp        *newrelic.Application
 }
 
 // Hub stores channels with clients currently subscribed and allows to dispatch updates.
@@ -215,6 +253,7 @@ type Hub struct {
 	config        *viper.Viper
 	server        *http.Server
 	metricsServer *http.Server
+	newRelicApp   *newrelic.Application
 }
 
 // NewHub creates a new Hub instance.

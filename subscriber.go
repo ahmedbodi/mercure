@@ -34,6 +34,7 @@ type Subscriber struct {
 	live                updateSource
 	logger              Logger
 	topicSelectorStore  *TopicSelectorStore
+	historySent         bool
 }
 
 // NewSubscriber creates a new subscriber.
@@ -52,6 +53,7 @@ func NewSubscriber(lastEventID string, logger Logger, tss *TopicSelectorStore) *
 		disconnected:       make(chan struct{}),
 		logger:             logger,
 		topicSelectorStore: tss,
+		historySent:        true,
 	}
 
 	if lastEventID != "" {
