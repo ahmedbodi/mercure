@@ -13,7 +13,6 @@ import (
 	"sync"
 )
 
-
 const defaultRedisStreamName = "mercure-hub-updates"
 
 func init() { //nolint:gochecknoinits
@@ -105,14 +104,14 @@ func NewRedisTransport(u *url.URL, l Logger, tss *TopicSelectorStore) (Transport
 	}
 
 	return &RedisTransport{
-		logger:           l,
-		size:             size,
-		subscribers:      make(map[*Subscriber]struct{}),
-		closed:           make(chan struct{}),
-		lastEventID:      getLastEventID(client, streamName),
-		client: 		  client,
-		streamName: 	  streamName,
-		lastSeq: 		  "+",
+		logger:      l,
+		size:        size,
+		subscribers: make(map[*Subscriber]struct{}),
+		closed:      make(chan struct{}),
+		lastEventID: getLastEventID(client, streamName),
+		client:      client,
+		streamName:  streamName,
+		lastSeq:     "+",
 	}, nil
 }
 

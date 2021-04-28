@@ -183,7 +183,7 @@ func WithTopicSelectorStore(tss *TopicSelectorStore) Option {
 }
 
 func WithNewRelic(name string, license string) Option {
-	return func (o *opt) error {
+	return func(o *opt) error {
 		nrApp, err := newrelic.NewApplication(
 			newrelic.ConfigAppName(name),
 			newrelic.ConfigLicense(license),
@@ -202,9 +202,9 @@ func WithNewRelic(name string, license string) Option {
 func WithSentry(value string) Option {
 	return func(o *opt) error {
 		err := sentry.Init(sentry.ClientOptions{
-			Dsn: value,
+			Dsn:     value,
 			Release: common.AppVersion.Shortline(),
-			Debug: o.debug,
+			Debug:   o.debug,
 		})
 
 		if err != nil {
