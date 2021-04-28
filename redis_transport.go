@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/getsentry/sentry-go"
-	"github.com/go-redis/redis"
-	"go.uber.org/zap"
 	"net/url"
 	"runtime"
 	"strconv"
 	"sync"
+
+	"github.com/getsentry/sentry-go"
+	"github.com/go-redis/redis"
+	"go.uber.org/zap"
 )
 
 const defaultRedisStreamName = "mercure-hub-updates"
@@ -23,6 +24,7 @@ func redisNilToNil(err error) error {
 	if errors.Is(err, redis.Nil) {
 		return nil
 	}
+
 	return err
 }
 
@@ -41,13 +43,13 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64, error) {
 		q.Del("stream_name")
 	}
 
-	size := int64(0)
-	sizeParameter := q.Get("size")
+	size, sizeParameter := int64(0), q.Get("size")
 	if sizeParameter != "" {
 		size, err = strconv.ParseInt(sizeParameter, 10, 64)
 		if err != nil {
 			sentry.CaptureException(err)
 			err = &ErrTransport{u.Redacted(), fmt.Sprintf(`invalid "size" parameter %q`, sizeParameter), err}
+
 			return nil, streamName, 0, err
 		}
 		q.Del("size")
@@ -59,6 +61,7 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64, error) {
 	if err != nil {
 		sentry.CaptureException(err)
 		err = &ErrTransport{u.Redacted(), fmt.Sprintf(`invalid "redis" dsn %q`, u.String()), err}
+
 		return nil, streamName, 0, err
 	}
 	var client *redis.Client
@@ -76,8 +79,10 @@ func createRedisClient(u *url.URL) (*redis.Client, string, int64, error) {
 	if _, err := client.Ping().Result(); err != nil {
 		sentry.CaptureException(err)
 		err = &ErrTransport{u.Redacted(), fmt.Sprintf(`error connecting to redis:  %s`, err), err}
+
 		return nil, streamName, 0, err
 	}
+
 	return client, streamName, size, err
 }
 
@@ -93,7 +98,6 @@ type RedisTransport struct {
 	closedOnce  sync.Once
 	lastSeq     string
 	lastEventID string
-	url         *url.URL
 }
 
 // NewRedisTransport create a new redis transport.
@@ -148,11 +152,7 @@ func (t *RedisTransport) Dispatch(update *Update) error {
 		return fmt.Errorf("error when marshaling update: %w", err)
 	}
 
-	if err := t.persist(update.ID, updateJSON); err != nil {
-		return err
-	}
-
-	return nil
+	return t.persist(update.ID, updateJSON)
 }
 
 // persist stores update in the database.
@@ -194,6 +194,7 @@ func (t *RedisTransport) persist(updateID string, updateJSON []byte) error {
 	if err := t.client.Eval(script, []string{t.streamName, t.cacheKeyID(updateID), t.cacheKeyID("")}, t.size, updateJSON).Err(); err != nil {
 		return redisNilToNil(err)
 	}
+
 	return nil
 }
 
@@ -217,6 +218,7 @@ func (t *RedisTransport) AddSubscriber(s *Subscriber) error {
 		t.dispatchHistory(s, toSeq)
 	}
 	s.historySent = true
+
 	return nil
 }
 
@@ -256,6 +258,7 @@ func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
 		if err != nil {
 			s.HistoryDispatched(responseLastEventID)
 			s.historySent = true
+
 			return
 		}
 
@@ -265,8 +268,10 @@ func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
 		if err != nil {
 			s.HistoryDispatched(responseLastEventID)
 			s.historySent = true
+
 			return
 		}
+
 		fromSeq = result[0].Messages[0].ID
 	} else {
 		fromSeq = "-"
@@ -276,6 +281,7 @@ func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
 	if err != nil {
 		s.HistoryDispatched(responseLastEventID)
 		s.historySent = true
+
 		return
 	}
 
@@ -284,6 +290,7 @@ func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
 		if !ok {
 			s.HistoryDispatched(responseLastEventID)
 			s.historySent = true
+
 			return
 		}
 
@@ -291,12 +298,14 @@ func (t *RedisTransport) dispatchHistory(s *Subscriber, toSeq string) {
 		if err := json.Unmarshal([]byte(fmt.Sprintf("%v", message)), &update); err != nil {
 			s.HistoryDispatched(responseLastEventID)
 			s.historySent = true
+
 			return
 		}
 
 		if !s.Dispatch(update, true) {
 			s.HistoryDispatched(responseLastEventID)
 			s.historySent = true
+
 			return
 		}
 		responseLastEventID = entry.ID
@@ -317,6 +326,7 @@ func (t *RedisTransport) Close() (err error) {
 		}
 		t.Unlock()
 	})
+
 	return nil
 }
 
@@ -327,11 +337,13 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 		select {
 		case <-t.closed:
 			t.logger.Info("Closing Transport. Entry ID: %s", zap.String("Entry ID", streamArgs.Streams[1]))
+
 			return
 		default:
 			streams, err := t.client.XRead(streamArgs).Result()
 			if err != nil {
 				t.logger.Debug("Stream XRead error", zap.Error(err))
+
 				continue
 			}
 
@@ -343,6 +355,7 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 			if !ok {
 				streamArgs.Streams[1] = entry.ID
 				t.logger.Warn("Couldn't Decode Entry", zap.String("Last Entry ID", streamArgs.Streams[1]))
+
 				continue
 			}
 
@@ -351,16 +364,18 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 				streamArgs.Streams[1] = entry.ID
 				sentry.CaptureException(err)
 				t.logger.Warn("Couldn't JSON Load Entry.", zap.String("Entry ID", entry.ID))
+
 				continue
 			}
 
 			t.logger.Info("Sending Update ID to Subscribers", zap.String("Update ID", update.ID))
 
-			_, subscribers, err := t.GetSubscribers()
+			_, subscribers, _ := t.GetSubscribers()
 
 			for _, subscriber := range subscribers {
 				if !subscriber.historySent {
 					t.logger.Info("Subscriber is still receiving history", zap.String("Subscriber ID", subscriber.ID))
+
 					continue
 				}
 
@@ -373,6 +388,7 @@ func (t *RedisTransport) SubscribeToMessageStream() {
 						zap.String("Entry ID", entry.ID),
 						zap.String("Subscriber ID", subscriber.ID),
 					)
+
 					continue
 				}
 			}

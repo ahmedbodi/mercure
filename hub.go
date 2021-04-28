@@ -4,12 +4,12 @@ package mercure
 
 import (
 	"fmt"
-	"github.com/dunglas/mercure/common"
-	"github.com/getsentry/sentry-go"
 	"net/http"
 	"time"
 
 	"github.com/dunglas/jwt-go"
+	"github.com/dunglas/mercure/common"
+	"github.com/getsentry/sentry-go"
 	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -189,12 +189,12 @@ func WithNewRelic(name string, license string) Option {
 			newrelic.ConfigLicense(license),
 			newrelic.ConfigDistributedTracerEnabled(true),
 		)
-
 		if err != nil {
-			return fmt.Errorf("error setting up newrelic: %s", err)
+			return fmt.Errorf("error setting up newrelic: %w", err)
 		}
 
 		o.newrelicApp = nrApp
+
 		return nil
 	}
 }
@@ -206,12 +206,12 @@ func WithSentry(value string) Option {
 			Release: common.AppVersion.Shortline(),
 			Debug:   o.debug,
 		})
-
 		if err != nil {
 			return fmt.Errorf("error when setting up sentry: %w", err)
 		}
 
 		defer sentry.Flush(2 * time.Second)
+
 		return nil
 	}
 }
@@ -253,7 +253,6 @@ type Hub struct {
 	config        *viper.Viper
 	server        *http.Server
 	metricsServer *http.Server
-	newRelicApp   *newrelic.Application
 }
 
 // NewHub creates a new Hub instance.
