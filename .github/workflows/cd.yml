@@ -1,9 +1,7 @@
 name: CD
 
 on:
-  push:
-    tags:
-      - 'v*'
+  - push
 
 jobs:
   release:
