@@ -8,9 +8,6 @@ import (
 	"time"
 
 	"github.com/dunglas/jwt-go"
-	"github.com/dunglas/mercure/common"
-	"github.com/getsentry/sentry-go"
-	"github.com/newrelic/go-agent/v3/newrelic"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
@@ -184,6 +181,7 @@ func WithTopicSelectorStore(tss *TopicSelectorStore) Option {
 
 func WithNewRelic(name string, license string) Option {
 	return func(o *opt) error {
+		/**
 		nrApp, err := newrelic.NewApplication(
 			newrelic.ConfigAppName(name),
 			newrelic.ConfigLicense(license),
@@ -194,13 +192,14 @@ func WithNewRelic(name string, license string) Option {
 		}
 
 		o.newrelicApp = nrApp
-
+		*/
 		return nil
 	}
 }
 
 func WithSentry(value string) Option {
 	return func(o *opt) error {
+		/**
 		err := sentry.Init(sentry.ClientOptions{
 			Dsn:     value,
 			Release: common.AppVersion.Shortline(),
@@ -211,7 +210,7 @@ func WithSentry(value string) Option {
 		}
 
 		defer sentry.Flush(2 * time.Second)
-
+		*/
 		return nil
 	}
 }
@@ -241,7 +240,6 @@ type opt struct {
 	allowedHosts       []string
 	publishOrigins     []string
 	corsOrigins        []string
-	newrelicApp        *newrelic.Application
 }
 
 // Hub stores channels with clients currently subscribed and allows to dispatch updates.
