@@ -4,6 +4,7 @@ package mercure
 
 import (
 	"fmt"
+	newrelic "github.com/newrelic/go-agent"
 	"net/http"
 	"time"
 
@@ -181,18 +182,16 @@ func WithTopicSelectorStore(tss *TopicSelectorStore) Option {
 
 func WithNewRelic(name string, license string) Option {
 	return func(o *opt) error {
-		/**
-		nrApp, err := newrelic.NewApplication(
-			newrelic.ConfigAppName(name),
-			newrelic.ConfigLicense(license),
-			newrelic.ConfigDistributedTracerEnabled(true),
-		)
+		config := newrelic.NewConfig(name, license)
+		config.Enabled = true
+		config.BrowserMonitoring.Enabled = true
+		config.DistributedTracer.Enabled = true
+		nrApp, err := newrelic.NewApplication(config)
 		if err != nil {
 			return fmt.Errorf("error setting up newrelic: %w", err)
 		}
 
 		o.newrelicApp = nrApp
-		*/
 		return nil
 	}
 }
@@ -240,6 +239,7 @@ type opt struct {
 	allowedHosts       []string
 	publishOrigins     []string
 	corsOrigins        []string
+	newrelicApp        newrelic.Application
 }
 
 // Hub stores channels with clients currently subscribed and allows to dispatch updates.
