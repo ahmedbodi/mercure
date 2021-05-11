@@ -93,7 +93,6 @@ type Mercure struct {
 	CacheMaxCost *int64 `json:"cache_max_cost,omitempty"`
 
 	NewRelic NewrelicConfig `json:"newrelic,omitempty"`
-	SentryDSN string `json:"sentry_dsn,omitempty"`
 
 	hub    *mercure.Hub
 	logger *zap.Logger
@@ -225,9 +224,6 @@ func (m *Mercure) Provision(ctx caddy.Context) error { //nolint:funlen
 		opts = append(opts, mercure.WithNewRelic(m.NewRelic.Name, m.NewRelic.License))
 	}
 
-	if len(m.SentryDSN) > 0 {
-		opts = append(opts, mercure.WithSentry(m.SentryDSN))
-	}
 
 	h, err := mercure.NewHub(opts...)
 	if err != nil {
@@ -389,12 +385,6 @@ func (m *Mercure) UnmarshalCaddyfile(d *caddyfile.Dispenser) error { //nolint:fu
 				}
 
 				m.NewRelic.License = d.Val()
-
-			case "sentry_dsn":
-				if !d.NextArg() {
-					return d.ArgErr()
-				}
-				m.SentryDSN = d.Val()
 			}
 		}
 	}

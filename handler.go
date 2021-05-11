@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	newrelic "github.com/newrelic/go-agent"
 	"net/http"
 	"os"
 	"os/signal"
@@ -36,9 +37,15 @@ func (h *Hub) initHandler() {
 
 	h.registerSubscriptionHandlers(router)
 
-	router.HandleFunc(defaultHubURL, h.SubscribeHandler).Methods("GET", "HEAD")
-	router.HandleFunc(defaultHubURL, h.PublishHandler).Methods("POST")
-
+	if h.newrelicApp != nil {
+		h.logger.Info("Wrapping HTTP Handlers with NewRelic")
+		router.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, defaultHubURL, h.SubscribeHandler)).Methods("GET", "HEAD")
+		router.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, defaultHubURL, h.PublishHandler)).Methods("POST")
+	} else {
+		h.logger.Info("Not Wrapping HTTP Handlers with NewRelic")
+		router.HandleFunc(defaultHubURL, h.SubscribeHandler).Methods("GET", "HEAD")
+		router.HandleFunc(defaultHubURL, h.PublishHandler).Methods("POST")
+	}
 	secureMiddleware := secure.New(secure.Options{
 		IsDevelopment:         h.debug,
 		AllowedHosts:          h.allowedHosts,

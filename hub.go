@@ -196,24 +196,6 @@ func WithNewRelic(name string, license string) Option {
 	}
 }
 
-func WithSentry(value string) Option {
-	return func(o *opt) error {
-		/**
-		err := sentry.Init(sentry.ClientOptions{
-			Dsn:     value,
-			Release: common.AppVersion.Shortline(),
-			Debug:   o.debug,
-		})
-		if err != nil {
-			return fmt.Errorf("error when setting up sentry: %w", err)
-		}
-
-		defer sentry.Flush(2 * time.Second)
-		*/
-		return nil
-	}
-}
-
 type jwtConfig struct {
 	key           []byte
 	signingMethod jwt.SigningMethod
