@@ -1,0 +1,14 @@
+version: "1"
+rules:
+  - base: transports/redis
+    upstream: dunglas:main
+    mergeMethod: merge
+    assignees:
+      - ahmedbodi
+    reviewers:
+      - ahmedbodi
+    conflictReviewers:
+      - ahmedbodi
+label: ":arrow_heading_down: pull"
+conflictLabel: "merge-conflict"
+
