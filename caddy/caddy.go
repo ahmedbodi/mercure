@@ -38,6 +38,11 @@ type JWTConfig struct {
 	Alg string `json:"alg,omitempty"`
 }
 
+type NewrelicConfig struct {
+	Name string `json:"name,omitempty"`
+	License string `json:"license,omitempty"`
+}
+
 type transportDestructor struct {
 	transport mercure.Transport
 }
@@ -87,6 +92,8 @@ type Mercure struct {
 	// Maximum cache cost, defaults to 100MB, set to -1 to disable the cache. See https://github.com/dgraph-io/ristretto for details.
 	CacheMaxCost *int64 `json:"cache_max_cost,omitempty"`
 
+	NewRelic NewrelicConfig `json:"newrelic,omitempty"`
+
 	hub    *mercure.Hub
 	logger *zap.Logger
 }
@@ -110,6 +117,11 @@ func (m *Mercure) Provision(ctx caddy.Context) error { //nolint:funlen
 	if m.PublisherJWT.Key == "" {
 		return errors.New("a JWT key for publishers must be provided") //nolint:goerr113
 	}
+
+	if m.NewRelic.License != "" && m.NewRelic.Name == "" {
+		return errors.New("the NewRelic application name must be specified") //nolint:goerr113
+	}
+
 	if m.PublisherJWT.Alg == "" {
 		m.PublisherJWT.Alg = "HS256"
 	}
@@ -207,6 +219,11 @@ func (m *Mercure) Provision(ctx caddy.Context) error { //nolint:funlen
 	if len(m.CORSOrigins) > 0 {
 		opts = append(opts, mercure.WithCORSOrigins(m.CORSOrigins))
 	}
+
+	if len(m.NewRelic.License) > 0 {
+		opts = append(opts, mercure.WithNewRelic(m.NewRelic.Name, m.NewRelic.License))
+	}
+
 
 	h, err := mercure.NewHub(opts...)
 	if err != nil {
@@ -354,6 +371,20 @@ func (m *Mercure) UnmarshalCaddyfile(d *caddyfile.Dispenser) error { //nolint:fu
 				}
 
 				m.CacheMaxCost = &v
+
+			case "newrelic_name":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+
+				m.NewRelic.Name = d.Val()
+
+			case "newrelic_license":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+
+				m.NewRelic.License = d.Val()
 			}
 		}
 	}
