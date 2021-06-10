@@ -11,6 +11,9 @@ changelog:
     exclude:
     - '^docs:'
     - '^test:'
+    - '^ci:'
+    - '^build:'
+    - '^chore:'
     - '^Merge'
 release:
   prerelease: auto
@@ -86,7 +89,6 @@ archives:
 dockers:
 - ids:
   - caddy
-  dockerfile: Dockerfile # See https://github.com/goreleaser/goreleaser/issues/1916
   image_templates:
   - 'ahmedbodi/mercure:{{ .Tag }}'
   - 'ahmedbodi/mercure:v{{ .Major }}'
@@ -106,3 +108,6 @@ dockers:
   - 'ahmedbodi/mercure:legacy-latest'
   extra_files:
   - public/
+signs:
+  - artifacts: checksum
+    args: ["--batch", "-u", "{{ .Env.GPG_FINGERPRINT }}", "--output", "${signature}", "--detach-sign", "${artifact}"]
