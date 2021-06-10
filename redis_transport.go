@@ -140,18 +140,23 @@ func getLastEventID(client *redis.Client, streamName string) string {
 
 // Dispatch dispatches an update to all subscribers and persists it in Bolt DB.
 func (t *RedisTransport) Dispatch(update *Update) error {
+	t.logger.Info("Inside Redis Dispatch. Checking for closed transport")
 	select {
 	case <-t.closed:
 		return ErrClosedTransport
 	default:
 	}
 
+	t.logger.Info("Assigning UUID")
 	AssignUUID(update)
+	t.logger.Info("Assigned UUID", zap.String("uuid", update.ID))
 	updateJSON, err := json.Marshal(*update)
+	t.logger.Info("Encoding JSO")
 	if err != nil {
 		return fmt.Errorf("error when marshaling update: %w", err)
 	}
 
+	t.logger.Info("Persisting Update")
 	return t.persist(update.ID, updateJSON)
 }
 
@@ -191,10 +196,12 @@ func (t *RedisTransport) persist(updateID string, updateJSON []byte) error {
 			redis.call("RPUSH", KEYS[2], streamID)`
 	}
 
+	t.logger.Info("Executing Update")
 	if err := t.client.Eval(script, []string{t.streamName, t.cacheKeyID(updateID), t.cacheKeyID("")}, t.size, updateJSON).Err(); err != nil {
 		return redisNilToNil(err)
 	}
 
+	t.logger.Info("Finished Storing Redis Update")
 	return nil
 }
 
