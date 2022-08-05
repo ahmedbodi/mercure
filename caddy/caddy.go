@@ -101,6 +101,8 @@ type Mercure struct {
 	// NewRelic config
 	NewRelic NewrelicConfig `json:"newrelic,omitempty"`
 
+	NewRelic NewrelicConfig `json:"newrelic,omitempty"`
+
 	hub    *mercure.Hub
 	logger *zap.Logger
 }
@@ -128,6 +130,11 @@ func (m *Mercure) Provision(ctx caddy.Context) error { //nolint:funlen
 	if m.PublisherJWT.Key == "" {
 		return errors.New("a JWT key for publishers must be provided") //nolint:goerr113
 	}
+
+	if m.NewRelic.License != "" && m.NewRelic.Name == "" {
+		return errors.New("the NewRelic application name must be specified") //nolint:goerr113
+	}
+
 	if m.PublisherJWT.Alg == "" {
 		m.PublisherJWT.Alg = "HS256"
 	}
@@ -223,6 +230,11 @@ func (m *Mercure) Provision(ctx caddy.Context) error { //nolint:funlen
 	if m.ProtocolVersionCompatibility != 0 {
 		opts = append(opts, mercure.WithProtocolVersionCompatibility(m.ProtocolVersionCompatibility))
 	}
+
+	if len(m.NewRelic.License) > 0 {
+		opts = append(opts, mercure.WithNewRelic(m.NewRelic.Name, m.NewRelic.License))
+	}
+
 
 	if len(m.NewRelic.License) > 0 {
 		opts = append(opts, mercure.WithNewRelic(m.NewRelic.Name, m.NewRelic.License))
@@ -394,6 +406,20 @@ func (m *Mercure) UnmarshalCaddyfile(d *caddyfile.Dispenser) error { //nolint:fu
 			}
 
 			m.NewRelic.Name = d.Val()
+      
+			case "newrelic_name":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+
+				m.NewRelic.Name = d.Val()
+
+			case "newrelic_license":
+				if !d.NextArg() {
+					return d.ArgErr()
+				}
+
+				m.NewRelic.License = d.Val()
 
 		case "newrelic_license":
 			if !d.NextArg() {

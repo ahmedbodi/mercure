@@ -5,6 +5,7 @@ package mercure
 import (
 	"errors"
 	"fmt"
+	newrelic "github.com/newrelic/go-agent"
 	"net/http"
 	"time"
 
@@ -260,6 +261,23 @@ type opt struct {
 
 func (o *opt) isBackwardCompatiblyEnabledWith(version int) bool {
 	return o.protocolVersionCompatibility != 0 && version >= o.protocolVersionCompatibility
+	transport          Transport
+	topicSelectorStore *TopicSelectorStore
+	anonymous          bool
+	debug              bool
+	subscriptions      bool
+	uiPath             string
+	logger             Logger
+	writeTimeout       time.Duration
+	dispatchTimeout    time.Duration
+	heartbeat          time.Duration
+	publisherJWT       *jwtConfig
+	subscriberJWT      *jwtConfig
+	metrics            Metrics
+	allowedHosts       []string
+	publishOrigins     []string
+	corsOrigins        []string
+	newrelicApp        newrelic.Application
 }
 
 // Hub stores channels with clients currently subscribed and allows to dispatch updates.

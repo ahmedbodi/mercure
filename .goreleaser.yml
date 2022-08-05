@@ -39,7 +39,7 @@ builds:
 - id: legacy
   dir: cmd/mercure
   ldflags:
-    - -s -w -X github.com/dunglas/mercure/common.version={{ .Version }} -X github.com/dunglas/mercure/common.commit={{ .ShortCommit }} -X github.com/dunglas/mercure/common.buildDate={{ .Date }}
+    - -s -w -X github.com/ahmedbodi/mercure/common.version={{ .Version }} -X github.com/ahmedbodi/mercure/common.commit={{ .ShortCommit }} -X github.com/ahmedbodi/mercure/common.buildDate={{ .Date }}
   goos:
     - linux
     - darwin
