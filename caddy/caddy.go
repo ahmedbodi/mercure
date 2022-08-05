@@ -38,6 +38,11 @@ type JWTConfig struct {
 	Alg string `json:"alg,omitempty"`
 }
 
+type NewrelicConfig struct {
+	Name string `json:"name,omitempty"`
+	License string `json:"license,omitempty"`
+}
+
 type transportDestructor struct {
 	transport mercure.Transport
 }
@@ -93,6 +98,9 @@ type Mercure struct {
 	// The version of the Mercure protocol to be backward compatible with (only version 7 is supported)
 	ProtocolVersionCompatibility int `json:"protocol_version_compatibility,omitempty"`
 
+	// NewRelic config
+	NewRelic NewrelicConfig `json:"newrelic,omitempty"`
+
 	hub    *mercure.Hub
 	logger *zap.Logger
 }
@@ -112,6 +120,10 @@ func (m *Mercure) Provision(ctx caddy.Context) error { //nolint:funlen
 	m.PublisherJWT.Alg = repl.ReplaceKnown(m.PublisherJWT.Alg, "HS256")
 	m.SubscriberJWT.Key = repl.ReplaceKnown(m.SubscriberJWT.Key, "")
 	m.SubscriberJWT.Alg = repl.ReplaceKnown(m.SubscriberJWT.Alg, "HS256")
+
+	if m.NewRelic.License != "" && m.NewRelic.Name == "" {
+		return errors.New("the NewRelic application name must be specified") //nolint:goerr113
+	}
 
 	if m.PublisherJWT.Key == "" {
 		return errors.New("a JWT key for publishers must be provided") //nolint:goerr113
@@ -211,6 +223,11 @@ func (m *Mercure) Provision(ctx caddy.Context) error { //nolint:funlen
 	if m.ProtocolVersionCompatibility != 0 {
 		opts = append(opts, mercure.WithProtocolVersionCompatibility(m.ProtocolVersionCompatibility))
 	}
+
+	if len(m.NewRelic.License) > 0 {
+		opts = append(opts, mercure.WithNewRelic(m.NewRelic.Name, m.NewRelic.License))
+	}
+
 
 	h, err := mercure.NewHub(opts...)
 	if err != nil {
@@ -370,6 +387,20 @@ func (m *Mercure) UnmarshalCaddyfile(d *caddyfile.Dispenser) error { //nolint:fu
 
 				m.ProtocolVersionCompatibility = v
 			}
+
+		case "newrelic_name":
+			if !d.NextArg() {
+				return d.ArgErr()
+			}
+
+			m.NewRelic.Name = d.Val()
+
+		case "newrelic_license":
+			if !d.NextArg() {
+				return d.ArgErr()
+			}
+
+			m.NewRelic.License = d.Val()
 		}
 	}
 

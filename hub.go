@@ -11,6 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
+	newrelic "github.com/newrelic/go-agent"
 )
 
 // ErrUnsupportedProtocolVersion is returned when the version passed is unsupported.
@@ -210,6 +211,22 @@ func WithProtocolVersionCompatibility(protocolVersionCompatibility int) Option {
 	}
 }
 
+func WithNewRelic(name string, license string) Option {
+	return func(o *opt) error {
+		config := newrelic.NewConfig(name, license)
+		config.Enabled = true
+		config.BrowserMonitoring.Enabled = true
+		config.DistributedTracer.Enabled = true
+		nrApp, err := newrelic.NewApplication(config)
+		if err != nil {
+			return fmt.Errorf("error setting up newrelic: %w", err)
+		}
+
+		o.newrelicApp = nrApp
+		return nil
+	}
+}
+
 type jwtConfig struct {
 	key           []byte
 	signingMethod jwt.SigningMethod
@@ -238,6 +255,7 @@ type opt struct {
 	corsOrigins                  []string
 	cookieName                   string
 	protocolVersionCompatibility int
+	newrelicApp                  newrelic.Application
 }
 
 func (o *opt) isBackwardCompatiblyEnabledWith(version int) bool {

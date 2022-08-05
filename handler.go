@@ -14,6 +14,7 @@ import (
 	"github.com/unrolled/secure"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/acme/autocert"
+	newrelic "github.com/newrelic/go-agent"
 )
 
 const (
@@ -200,9 +201,16 @@ func (h *Hub) chainHandlers() http.Handler { //nolint:funlen
 	r := mux.NewRouter()
 	h.registerSubscriptionHandlers(r)
 
-	r.HandleFunc(defaultHubURL, h.SubscribeHandler).Methods("GET", "HEAD")
-	r.HandleFunc(defaultHubURL, h.PublishHandler).Methods("POST")
-
+	if h.newrelicApp != nil {
+		h.logger.Info("Wrapping HTTP Handlers with NewRelic")
+		router.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, defaultHubURL, h.SubscribeHandler)).Methods("GET", "HEAD")
+		router.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, defaultHubURL, h.PublishHandler)).Methods("POST")
+	} else {
+		h.logger.Info("Not Wrapping HTTP Handlers with NewRelic")
+		router.HandleFunc(defaultHubURL, h.SubscribeHandler).Methods("GET", "HEAD")
+		router.HandleFunc(defaultHubURL, h.PublishHandler).Methods("POST")
+	}
+	
 	csp := "default-src 'self'"
 	if h.demo {
 		r.PathPrefix("/demo").HandlerFunc(h.Demo).Methods("GET", "HEAD")

@@ -34,6 +34,7 @@ type Subscriber struct {
 	ready               int32
 	liveQueue           []*Update
 	liveMutex           sync.RWMutex
+	historySent			bool
 }
 
 // NewSubscriber creates a new subscriber.
@@ -46,6 +47,7 @@ func NewSubscriber(lastEventID string, logger Logger) *Subscriber {
 		responseLastEventID: make(chan string, 1),
 		out:                 make(chan *Update, 1000),
 		logger:              logger,
+		historySent:         true,
 	}
 
 	return s
