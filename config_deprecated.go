@@ -43,6 +43,9 @@ func SetConfigDefaults(v *viper.Viper) {
 
 	v.SetDefault("metrics_enabled", false)
 	v.SetDefault("metrics_addr", "127.0.0.1:9764")
+
+	v.SetDefault("newrelic_license", "")
+	v.SetDefault("newrelic_name", "")
 }
 
 // ValidateConfig validates a Viper instance.
@@ -71,6 +74,13 @@ func ValidateConfig(v *viper.Viper) error {
 
 	if v.GetString("metrics_addr") == v.GetString("addr") {
 		return fmt.Errorf(`%w: "metrics_addr" must not be the same as "addr"`, ErrInvalidConfig)
+	}
+
+	if v.GetString("newrelic_license") != "" && v.GetString("newrelic_name") == "" {
+		return fmt.Errorf(`%w: if the "newrelic_license" configuration parameter is defined, "newrelic_name" must be defined too`, ErrInvalidConfig)
+	}
+	if v.GetString("newrelic_name") != "" && v.GetString("newrelic_license") == "" {
+		return fmt.Errorf(`%w: if the "newrelic_name" configuration parameter is defined, "newrelic_license" must be defined too`, ErrInvalidConfig)
 	}
 
 	return nil
@@ -108,6 +118,10 @@ func SetFlags(fs *pflag.FlagSet, v *viper.Viper) {
 
 	fs.Bool("metrics-enabled", false, "enable metrics")
 	fs.String("metrics-addr", "127.0.0.1:9764", "metrics HTTP server address")
+
+	fs.StringP("sentry_dsn", "", "", "dsn string to connect to sentry")
+	fs.StringP("newrelic_license", "", "", "newrelic license key")
+	fs.StringP("newrelic_name", "", "", "newrelic application name")
 
 	fs.VisitAll(func(f *pflag.Flag) {
 		_ = v.BindPFlag(strings.ReplaceAll(f.Name, "-", "_"), fs.Lookup(f.Name))

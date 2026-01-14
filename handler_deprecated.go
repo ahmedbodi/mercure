@@ -156,8 +156,15 @@ func (h *Hub) chainHandlers() http.Handler { //nolint:funlen
 	r := mux.NewRouter()
 	h.registerSubscriptionHandlers(r)
 
-	r.HandleFunc(defaultHubURL, h.SubscribeHandler).Methods(http.MethodGet, http.MethodHead)
-	r.HandleFunc(defaultHubURL, h.PublishHandler).Methods(http.MethodPost)
+	if h.newrelicApp != nil {
+		h.logger.Info("Wrapping HTTP Handlers with NewRelic")
+		router.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, defaultHubURL, h.SubscribeHandler)).Methods(http.MethodGet, http.MethodHead)
+		router.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, defaultHubURL, h.PublishHandler)).Methods(http.MethodPost)
+	} else {
+		h.logger.Info("Not Wrapping HTTP Handlers with NewRelic")
+		router.HandleFunc(defaultHubURL, h.SubscribeHandler).Methods(http.MethodGet, http.MethodHead)
+		router.HandleFunc(defaultHubURL, h.PublishHandler).Methods(http.MethodPost)
+	}
 
 	csp := "default-src 'self'"
 

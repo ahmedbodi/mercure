@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	newrelic "github.com/newrelic/go-agent"
 )
 
 const (
@@ -274,6 +275,22 @@ func WithProtocolVersionCompatibility(protocolVersionCompatibility int) Option {
 	}
 }
 
+func WithNewRelic(name string, license string) Option {
+	return func(o *opt) error {
+		config := newrelic.NewConfig(name, license)
+		config.Enabled = true
+		config.BrowserMonitoring.Enabled = true
+		config.DistributedTracer.Enabled = true
+		nrApp, err := newrelic.NewApplication(config)
+		if err != nil {
+			return fmt.Errorf("error setting up newrelic: %w", err)
+		}
+
+		o.newrelicApp = nrApp
+		return nil
+	}
+}
+
 // opt contains the available options.
 //
 // If you change this, also update the Caddy module and the documentation.
@@ -299,6 +316,7 @@ type opt struct {
 	corsOrigins                  []string
 	cookieName                   string
 	protocolVersionCompatibility int
+	newrelicApp                  newrelic.Application
 }
 
 func (o *opt) isBackwardCompatiblyEnabledWith(version int) bool {

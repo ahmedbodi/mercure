@@ -20,12 +20,14 @@ type Subscriber struct {
 
 	logger             *slog.Logger
 	topicSelectorStore *TopicSelectorStore
+	historySent				 bool
 }
 
 func NewSubscriber(logger *slog.Logger, topicSelectorStore *TopicSelectorStore) *Subscriber {
 	return &Subscriber{
 		logger:             logger,
 		topicSelectorStore: topicSelectorStore,
+		historySent:        true,
 	}
 }
 

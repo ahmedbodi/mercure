@@ -3,6 +3,10 @@ package mercure
 import (
 	"io/fs"
 	"log/slog"
+	"context"
+	"errors"
+	"fmt"
+	newrelic "github.com/newrelic/go-agent"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -40,12 +44,26 @@ func (h *Hub) initHandler() {
 
 	h.registerSubscriptionHandlers(router)
 
-	if h.subscriberJWTKeyFunc != nil || h.anonymous {
-		router.HandleFunc(defaultHubURL, h.SubscribeHandler).Methods(http.MethodGet, http.MethodHead)
-	}
+	if h.newrelicApp != nil {
+		h.logger.Info("Wrapping HTTP Handlers with NewRelic")
 
-	if h.publisherJWTKeyFunc != nil {
-		router.HandleFunc(defaultHubURL, h.PublishHandler).Methods(http.MethodPost)
+		if h.subscriberJWTKeyFunc != nil || h.anonymous {
+			router.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, defaultHubURL, h.SubscribeHandler)).Methods(http.MethodGet, http.MethodHead)
+		}
+
+		if h.publisherJWTKeyFunc != nil {
+			router.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, defaultHubURL, h.PublishHandler)).Methods(http.MethodPost)
+		}
+	} else {
+		h.logger.Info("Not Wrapping HTTP Handlers with NewRelic")
+		
+		if h.subscriberJWTKeyFunc != nil || h.anonymous {
+			router.HandleFunc(defaultHubURL, h.SubscribeHandler).Methods(http.MethodGet, http.MethodHead)
+		}
+
+		if h.publisherJWTKeyFunc != nil {
+			router.HandleFunc(defaultHubURL, h.PublishHandler).Methods(http.MethodPost)
+		}
 	}
 
 	secureMiddleware := secure.New(secure.Options{
@@ -93,7 +111,15 @@ func (h *Hub) registerSubscriptionHandlers(r *mux.Router) {
 	r.UseEncodedPath()
 	r.SkipClean(true)
 
-	r.HandleFunc(subscriptionURL, h.SubscriptionHandler).Methods(http.MethodGet)
-	r.HandleFunc(subscriptionsForTopicURL, h.SubscriptionsHandler).Methods(http.MethodGet)
-	r.HandleFunc(subscriptionsURL, h.SubscriptionsHandler).Methods(http.MethodGet)
+	if h.newrelicApp != nil {
+		h.logger.Info("Wrapping HTTP Handlers with NewRelic")
+		router.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, subscriptionURL, h.SubscriptionHandler)).Methods(http.MethodGet)
+		router.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, subscriptionsForTopicURL, h.SubscriptionsHandler)).Methods(http.MethodGet)
+		router.HandleFunc(newrelic.WrapHandleFunc(h.newrelicApp, subscriptionsURL, h.SubscriptionsHandler)).Methods(http.MethodGet)
+	} else {
+		h.logger.Info("Not Wrapping HTTP Handlers with NewRelic")
+		r.HandleFunc(subscriptionURL, h.SubscriptionHandler).Methods(http.MethodGet)
+		r.HandleFunc(subscriptionsForTopicURL, h.SubscriptionsHandler).Methods(http.MethodGet)
+		r.HandleFunc(subscriptionsURL, h.SubscriptionsHandler).Methods(http.MethodGet)
+	}
 }
